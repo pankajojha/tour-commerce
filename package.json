@@ -1,0 +1,38 @@
+{
+  "name": "tour-agent-platform",
+  "version": "1.0.0",
+  "description": "Tour excursion booking platform with AWS serverless architecture",
+  "private": true,
+  "workspaces": [
+    "infrastructure",
+    "services/shared",
+    "services/*"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"**/*.{ts,json,md}\"",
+    "deploy:infra": "cd infrastructure && npm run deploy",
+    "synth:infra": "cd infrastructure && npm run synth"
+  },
+  "keywords": [
+    "tour",
+    "booking",
+    "excursion",
+    "aws",
+    "serverless",
+    "cdk"
+  ],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
+  }
+}

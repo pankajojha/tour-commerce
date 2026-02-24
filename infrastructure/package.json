@@ -1,0 +1,29 @@
+{
+  "name": "tour-agent-infrastructure",
+  "version": "1.0.0",
+  "description": "AWS CDK infrastructure for tour excursion booking platform",
+  "main": "bin/app.js",
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk",
+    "deploy": "cdk deploy --all",
+    "synth": "cdk synth",
+    "diff": "cdk diff"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/node": "^20.19.33",
+    "aws-cdk": "^2.100.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.100.0",
+    "constructs": "^10.0.0",
+    "source-map-support": "^0.5.21",
+    "tsc": "^2.0.4"
+  }
+}

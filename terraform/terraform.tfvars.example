@@ -1,0 +1,12 @@
+# AWS Configuration
+aws_region = "us-east-1"
+environment = "production"
+
+# Network Configuration
+vpc_cidr = "10.0.0.0/16"
+availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
+
+# Database Configuration
+database_name = "touragent"
+aurora_min_capacity = 0.5
+aurora_max_capacity = 128

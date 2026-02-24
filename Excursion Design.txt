@@ -1,0 +1,375 @@
+Business Model & User Flow
+
+System Architecture
+Data Model Design
+Booking & Inventory Logic
+Destination-Based Selling Logic
+Mapping to Cruise Schedules
+Mapping to Flight Schedules
+Pricing & Yield Management
+Admin & Operations Tools
+Future-Proofing & Scalability
+
+Business Model & User Flow
+Concept:
+User chooses:
+A destination (e.g., Cozumel, Barcelona, Nassau)
+Or a cruise itinerary
+Or a flight arrival city
+System returns:
+Relevant shore excursions
+Available time slots
+Pricing
+Capacity
+Cut-off rules
+User books → pays → receives voucher → operator notified.
+
+Core Components
+Frontend
+Website / Mobile App
+Destination search
+Calendar-based availability
+Booking engine
+
+Backend
+Excursion Inventory Service
+Pricing Engine
+Availability Engine
+Cruise & Flight Mapping Engine
+Booking & Payment Service
+Integrations
+Cruise schedule feeds
+Flight schedule APIs
+Payment gateway (Stripe/Adyen)
+Email/SMS notifications
+
+DB Structures
+Destination
+- id
+- name
+- country
+- port_code (if cruise port)
+- airport_code (if flight-based)
+- timezone
+- geo_coordinates
+
+Excursion
+- id
+- title
+- description
+- destination_id (FK)
+- duration_minutes
+- difficulty_level
+- meeting_point
+- cancellation_policy
+- supplier_id
+- base_price
+- currency
+- active_status
+
+
+ExcursionSchedule
+- id
+- excursion_id
+- start_time
+- end_time
+- capacity
+- available_spots
+- operating_days
+- blackout_dates
+
+
+Supplier
+- id
+- company_name
+- contact_email
+- contract_type
+- commission_percentage
+
+CruisePortCall
+- id
+- cruise_line
+- ship_name
+- sailing_id
+- destination_id
+- arrival_time
+- departure_time
+- date
+
+FlightArrival
+- id
+- airline
+- flight_number
+- arrival_airport
+- arrival_time
+- date
+
+Booking & Inventory Logic
+Inventory Rules
+When a user selects:
+	Destination: Cozumel
+	Date: May 10
+	Cruise arrival: 8:00 AM
+	Departure: 5:00 PM
+System should:
+Fetch excursions for Cozumel
+Filter by:
+	Operating day
+	Available capacity
+	Start time ≥ arrival + buffer
+	End time ≤ departure - buffer
+Buffer Example:
+Arrival buffer: 1 hour
+Return buffer: 1.5 hours
+
+Destination-Based Selling Logic
+Scenario 1: User selects destination only
+
+Show:
+	Top-rated excursions
+	Duration filters
+	Price range
+	Categories (Beach, Adventure, Culture, Food)
+	
+Scenario 2: User selects cruise first
+Eligible Excursion if:
+start_time > cruise_arrival + buffer
+AND
+end_time < cruise_departure - buffer
+
+
+Scenario 3: User selects flight arrival
+Eligible Excursion if:
+start_time > flight_arrival + buffer
+
+Layover:
+end_time < next_flight_departure - buffer
+
+Option A: Static Mapping (pre-mapping)
+CruiseShip X → Allowed Excursion IDs
+
+
+Option B: Dynamic Mapping (Better)
+Calculate eligibility dynamically based on time windows.
+
+Pricing Strategy
+Option 1: Fixed Price
+Option 2: Tiered
+	Adult
+	Child
+	Infant
+
+Option 3: Dynamic Pricing
+Based on:
+	Demand
+	Cruise occupancy
+	Seasonality
+	Remaining capacity
+	
+Admin functionality
+	Supplier Dashboard
+	Add excursions
+	Manage availability
+	View bookings
+	Set blackout dates
+	Operations Dashboard
+	Manifest per excursion
+	Passenger list
+	Emergency contacts
+	Live capacity tracking
+	Reporting
+	Revenue by destination
+	Revenue by cruise line
+	Commission tracking
+	Refund tracking
+	
+A. Category System
+	Adventure
+	Cultural
+	Water Sports
+	VIP
+
+B. Reviews & Ratings
+C. Cross-Sell
+If user books:
+	Snorkeling
+	Offer:
+	Beach club add-on
+	
+Critical Operational Safeguards
+	Always build time-zone-aware logic
+	Hard-stop booking 4–12 hours before departure
+	Emergency contact per passenger
+	Weather cancellation workflow
+	Refund automation
+	
+Destination → Cruise → Port Call → Time Window → Eligible Excursions → Availability → Booking → Payment → Confirmation
+AND
+Airport Arrival → Transfer Buffer → Eligible Tours → Booking
+
+
+                        ┌─────────────────────┐
+                        │      Frontend       │
+                        │  Web / Mobile App   │
+                        └──────────┬──────────┘
+                                   │
+                            API Gateway
+                                   │
+        ┌──────────────────────────┼──────────────────────────┐
+        │                          │                          │
+ ┌──────────────┐         ┌────────────────┐         ┌─────────────────┐
+ │Excursion Svc │         │ Booking Service│         │User Service     │
+ └──────┬───────┘         └────────┬───────┘         └─────────────────┘
+        │                          │
+ ┌──────▼────────┐        ┌────────▼────────┐
+ │Availability   │        │ Payment Service │
+ │Engine         │        └────────┬────────┘
+ └──────┬────────┘                 │
+        │                  ┌────────▼─────────┐
+        │                  │ Payment Gateway  │
+        │                  │ (Stripe/Adyen)   │
+        │                  └──────────────────┘
+        │
+ ┌──────▼──────────────┐
+ │ Cruise & Flight     │
+ │ Mapping Engine      │
+ └──────┬──────────────┘
+        │
+ ┌──────▼──────────────┐
+ │ Schedule Database   │
+ │ (Cruise + Flight)   │
+ └─────────────────────┘
+
+                      ┌──────────────────────┐
+                      │      API Gateway     │
+                      └──────────┬───────────┘
+                                 │
+ ┌──────────────────────────────────────────────────────────┐
+ │                    Core Services                         │
+ ├──────────────────────────────────────────────────────────┤
+ │ 1. Destination Service                                   │
+ │ 2. Excursion Service                                     │
+ │ 3. Inventory Service                                     │
+ │ 4. Pricing Engine                                        │
+ │ 5. Booking Service                                       │
+ │ 6. Payment Service                                       │
+ │ 7. Cruise Schedule Service                               │
+ │ 8. Flight Schedule Service                               │
+ │ 9. Recommendation Engine                                 │
+ └──────────────────────────────────────────────────────────┘
+                                 │
+                     ┌───────────┴───────────┐
+                     │      Data Layer       │
+                     ├───────────────────────┤
+                     │ PostgreSQL            │
+                     │ Redis (cache)         │
+                     │ Elasticsearch (search)│
+                     └───────────────────────┘
+
+Flow Diagram
+User selects Cruise:
+Royal Caribbean → Ship → Date
+
+            │
+            ▼
+Fetch Port Call Data
+(arrival + departure)
+
+            │
+            ▼
+Apply Buffer Rules
+arrival + 1hr
+departure - 1.5hr
+
+            │
+            ▼
+Filter Excursions
+WHERE
+start_time >= arrival_buffer
+AND
+end_time <= departure_buffer
+AND
+capacity > 0
+AND
+operating_day = true
+
+            │
+            ▼
+Return Eligible Products
+
+
+Flight Mapping Diagram : 
+User selects Flight Arrival
+
+           │
+           ▼
+Fetch Arrival Time
+
+           │
+           ▼
+Apply Airport Transfer Buffer (e.g., 2 hrs)
+
+           │
+           ▼
+Filter Excursions Starting After Buffer
+
+Over Booking Flow: 
+User clicks Book
+        │
+        ▼
+Check Availability (Redis cache)
+        │
+        ▼
+Lock Inventory (5-minute hold)
+        │
+        ▼
+Process Payment
+        │
+        ▼
+Confirm Booking
+        │
+        ▼
+Reduce Available Capacity
+        │
+        ▼
+Send Confirmation + Notify Supplier
+
+
+Inventory Model:
+Excursion
+   │
+   ├── ExcursionSchedule (date/time)
+            │
+            ├── Inventory (total, sold, held)
+            │
+            └── Booking Records
+
+Complete LifeCycle:
+Cruise Line Publishes Itinerary
+            │
+            ▼
+Cruise Schedule Service Updates DB
+            │
+            ▼
+Mapping Engine Activates Excursions
+            │
+            ▼
+Customer Searches Destination
+            │
+            ▼
+Filtered Eligible Excursions
+            │
+            ▼
+Booking + Payment
+            │
+            ▼
+Supplier Receives Manifest
+
+Booking Confirmed → Event Bus → 
+    ├─ Notify Supplier
+    ├─ Update Inventory
+    ├─ Send Email
+    ├─ Update Reporting
+
+
+Use AI engine to Up Sell the excursions and activities

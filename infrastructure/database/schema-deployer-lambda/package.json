@@ -1,0 +1,20 @@
+{
+  "name": "schema-deployer-lambda",
+  "version": "1.0.0",
+  "description": "Lambda function to deploy database schema migrations",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "package": "npm run build && npm ci --production"
+  },
+  "dependencies": {
+    "@aws-sdk/client-secrets-manager": "^3.400.0",
+    "pg": "^8.11.0"
+  },
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.119",
+    "@types/node": "^20.0.0",
+    "@types/pg": "^8.10.0",
+    "typescript": "^5.0.0"
+  }
+}
