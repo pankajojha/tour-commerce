@@ -131,6 +131,37 @@ This will deploy:
 npm run build
 ```
 
+## Troubleshooting: `tsc` / build issue
+
+- Symptom: running `npm run build` for the `infrastructure` workspace printed:
+   "This is not the tsc command you are looking for" and the build failed.
+
+- Root cause: a deprecated/npm package named `tsc` was present in the repository's
+   `node_modules` and provided a `tsc` binary that is not the official TypeScript
+   compiler. That binary prints the message above when invoked.
+
+- What was changed:
+   - Removed the stray `tsc` package from the repo.
+   - Updated `infrastructure/package.json` build scripts to use `npm exec -- tsc`
+      which runs the `tsc` from installed `typescript` rather than invoking an
+      external `tsc` package via `npx`.
+
+- Commands to reproduce or verify the fix:
+
+```bash
+# refresh deps and run infra build
+npm install
+npm --workspace=infrastructure run build
+```
+
+- Alternatives / quick fixes:
+   - Install TypeScript locally in the workspace: `npm install --workspace=infrastructure --save-dev typescript`
+   - Remove any stray `tsc` package: `npm uninstall tsc` (repo root)
+
+If the build fails after these steps, check `node_modules/.bin/tsc` to ensure it points
+to the `typescript` binary and not the deprecated `tsc` package.
+```
+
 ### Lint
 
 ```bash
@@ -182,3 +213,11 @@ aws sso login  --profile AdministratorAccess-727974078184
 
 export CDK_DEFAULT_ACCOUNT=727974078184
 export CDK_DEFAULT_REGION=us-east-1
+
+cd ~/tour-agent
+git add infrastructure/lib/stacks/database-schema-stack.ts
+git commit -m "feat(cdk): enable local bundling for Lambda to avoid Docker permission issues"
+npm --workspace=infrastructure run synth
+
+
+rm -rf node_modules package-lock.json infrastructure/node_modules infrastructure/package-lock.json && npm install && npm --workspace=infrastructure run synth 2>&1 | grep -i "EBADENGINE\|deprecated" | head -10

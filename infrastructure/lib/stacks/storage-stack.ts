@@ -75,7 +75,7 @@ export class StorageStack extends cdk.Stack {
     this.distribution = new cloudfront.Distribution(this, 'CDN', {
       comment: 'CDN for tour agent platform',
       defaultBehavior: {
-        origin: new origins.S3Origin(this.staticAssetsBucket, {
+        origin: origins.S3BucketOrigin.withOriginAccessIdentity(this.staticAssetsBucket, {
           originAccessIdentity,
         }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,

@@ -21,6 +21,12 @@ export class DatabaseSchemaStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: DatabaseSchemaStackProps) {
     super(scope, id, props);
 
+    // Create log group for Lambda
+    const schemaDeployerLogGroup = new logs.LogGroup(this, 'SchemaDeployerLogGroup', {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
     // Lambda function for schema deployment
     this.schemaDeployerFunction = new lambda.Function(this, 'SchemaDeployerFunction', {
       runtime: lambda.Runtime.NODEJS_18_X,
@@ -41,6 +47,29 @@ export class DatabaseSchemaStack extends cdk.Stack {
               'cp -r migrations/* /asset-output/migrations/',
             ].join(' && '),
           ],
+          local: {
+            tryBundle(outputDir: string): boolean {
+              try {
+                require('child_process').execSync(
+                  [
+                    'cd schema-deployer-lambda',
+                    'npm ci',
+                    'npm run build',
+                    `cp -r dist/* ${outputDir}/`,
+                    `cp -r node_modules ${outputDir}/`,
+                    'cd ..',
+                    `mkdir -p ${outputDir}/migrations`,
+                    `cp -r migrations/* ${outputDir}/migrations/`,
+                  ].join(' && '),
+                  { cwd: path.join(__dirname, '../../database'), stdio: 'inherit', shell: true },
+                );
+                return true;
+              } catch (e) {
+                console.error('Local bundling failed, falling back to Docker:', e);
+                return false;
+              }
+            },
+          },
         },
       }),
       timeout: cdk.Duration.minutes(15),
@@ -54,16 +83,22 @@ export class DatabaseSchemaStack extends cdk.Stack {
         DB_SECRET_ARN: props.databaseCredentialsSecret.secretArn,
         MIGRATIONS_DIR: '/var/task/migrations',
       },
-      logRetention: logs.RetentionDays.ONE_WEEK,
+      logGroup: schemaDeployerLogGroup,
     });
 
     // Grant Lambda permission to read database credentials
     props.databaseCredentialsSecret.grantRead(this.schemaDeployerFunction);
 
+    // Create log group for custom resource provider
+    const providerLogGroup = new logs.LogGroup(this, 'SchemaDeployerProviderLogGroup', {
+      retention: logs.RetentionDays.ONE_WEEK,
+      removalPolicy: cdk.RemovalPolicy.DESTROY,
+    });
+
     // Custom resource provider
     const provider = new cr.Provider(this, 'SchemaDeployerProvider', {
       onEventHandler: this.schemaDeployerFunction,
-      logRetention: logs.RetentionDays.ONE_WEEK,
+      logGroup: providerLogGroup,
     });
 
     // Custom resource to trigger schema deployment

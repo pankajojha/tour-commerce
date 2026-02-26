@@ -4,8 +4,8 @@
   "description": "AWS CDK infrastructure for tour excursion booking platform",
   "main": "bin/app.js",
   "scripts": {
-    "build": "tsc",
-    "watch": "tsc -w",
+    "build": "npm exec -- tsc",
+    "watch": "npm exec -- tsc -w",
     "cdk": "cdk",
     "deploy": "cdk deploy --all",
     "synth": "cdk synth",
@@ -23,7 +23,6 @@
   "dependencies": {
     "aws-cdk-lib": "^2.100.0",
     "constructs": "^10.0.0",
-    "source-map-support": "^0.5.21",
-    "tsc": "^2.0.4"
+    "source-map-support": "^0.5.21"
   }
 }
