@@ -1,1 +1,62 @@
-node_modules
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+infrastructure/cdk.out/
+infrastructure/dist/
+*.js
+*.d.ts
+!*.config.js
+
+# Runtime/logs
+*.log
+logs/
+.npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-workspace
+*.sublime-project
+.project
+.classpath
+.settings/
+
+# Testing
+coverage/
+.nyc_output/
+.tap/
+
+# Cache
+.cache/
+.eslintcache
+.parcel-cache/
+
+# Terraform
+.terraform/
+.terraform.lock.hcl
+terraform/terraform.tfvars
+*.tfstate
+*.tfstate.*
+
+# AWS CDK
+cdk.context.json
