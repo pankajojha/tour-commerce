@@ -2,9 +2,23 @@
 
 ## Overview
 
-The Tour Excursion Booking Platform is a comprehensive AWS-based system that enables travelers to discover, book, and manage shore excursions and tours based on their destination, cruise itinerary, or flight arrival. The platform supports destination-based selling with intelligent time-window filtering for cruise passengers and flight arrivals, dynamic pricing, real-time inventory management, and multi-channel authentication including social media login. The system integrates with cruise schedule feeds, flight APIs, and payment gateways to provide a seamless booking experience while ensuring operational safeguards like timezone-aware logic, booking cut-offs, and overbooking prevention.
+The Tour Excursion Booking Platform is a comprehensive AWS-based system that enables travelers to discover, book, and manage shore excursions and tours as part of a broader itinerary planning experience. The platform supports:
 
-The architecture leverages AWS managed services for scalability, reliability, and cost-effectiveness, including API Gateway for API management, Lambda with Go runtime for serverless compute, Aurora Serverless v2 PostgreSQL for all persistent data with auto-scaling capabilities, ElastiCache Redis for inventory locking, Cognito for authentication, EventBridge for event-driven workflows, and SageMaker for AI-powered recommendations. The frontend is built with React and TypeScript, while infrastructure is managed using AWS CDK with TypeScript.
+- **Itinerary Assembly**: Users can build complete trip plans including shore excursions, hotel bookings, flight bookings, cruise bookings, leisure time, and other activities
+- **Destination-Based Selling**: Intelligent time-window filtering for cruise passengers and flight arrivals
+- **Dining & Shopping Recommendations**: Integrated restaurant recommendations, shopping locations, and local products
+- **Multi-Revenue Streams**: Excursion commissions, restaurant affiliate bookings, and shopping affiliate commissions
+- **AI-Powered Recommendations**: Context-based ranking combining destination, time windows, behavioral data, and popularity signals
+- **Dynamic Pricing**: Real-time pricing based on demand, seasonality, and capacity
+- **Multi-Channel Authentication**: Social media login (Google, Microsoft, Facebook, Instagram, TikTok, LinkedIn) and passwordless flows via AWS Cognito
+- **AI-Powered Assistance**: AgentCore runtime powered by AWS Bedrock for trip planning, recommendations, and conflict detection
+- **Sharing & Collaboration**: Users can share itineraries with friends and family with view or edit permissions
+- **Partner Excursions**: Direct sales of partner shore excursions configured via MCP tools
+- **Search Integration**: Google Places data, Google Trends, ratings, and popular search keywords
+
+The system integrates with cruise schedule feeds, flight APIs, payment gateways, Google Places API, and affiliate networks to provide a seamless booking experience while ensuring operational safeguards like timezone-aware logic, booking cut-offs, overbooking prevention, and automatic conflict detection.
+
+The architecture leverages AWS managed services for scalability, reliability, and cost-effectiveness, including API Gateway for API management, Lambda with Go runtime for serverless compute, Aurora Serverless v2 PostgreSQL for all persistent data with auto-scaling capabilities, ElastiCache Redis for inventory locking, Cognito for authentication, EventBridge for event-driven workflows, AWS Bedrock for AI capabilities, Elasticsearch for search and analytics, and SageMaker for recommendations. The frontend is built with React 18+, TypeScript, and Vite with Tailwind CSS, while infrastructure is managed using AWS CDK with TypeScript.
 
 ## Technology Stack
 
@@ -14,9 +28,11 @@ The architecture leverages AWS managed services for scalability, reliability, an
 - All backend services and Lambda functions are written in Go
 
 **Frontend**:
-- Framework: React
+- Framework: React 18+
 - Language: TypeScript
-- Build tool: Vite or Create React App
+- Build tool: Vite
+- Styling: Tailwind CSS
+- State Management: React Context/Redux (TBD)
 
 **Infrastructure as Code**:
 - Tool: AWS CDK
@@ -26,8 +42,10 @@ The architecture leverages AWS managed services for scalability, reliability, an
 **Database & Storage**:
 - Primary Database: Aurora Serverless v2 PostgreSQL
 - Cache: ElastiCache Redis
-- Object Storage: Amazon S3
-- Search: Amazon OpenSearch
+- Object Storage: Amazon S3 (assets, conversation logs, memory snapshots)
+- Search: Amazon OpenSearch / Elasticsearch
+- Analytics: Separate analytics database for reporting
+- AI Memory: DynamoDB or S3 for short/long-term memory stores
 
 **Key Go Libraries**:
 - AWS SDK: github.com/aws/aws-sdk-go-v2
@@ -1385,6 +1403,179 @@ interface CommissionReport {
 - Capacity utilization analytics
 - Export functionality for reports
 
+
+### Component 12: Itinerary Management Service (AWS Lambda + RDS)
+
+**Purpose**: Manages user itineraries, trip planning, and sharing functionality
+
+**AWS Services**:
+- Lambda with Go 1.x runtime (itinerary operations, sharing logic)
+- Aurora Serverless v2 PostgreSQL (itinerary data, items, shares)
+- S3 (itinerary exports, attachments)
+
+**Key Features**:
+- Create and manage trip itineraries
+- Add multiple item types (excursions, flights, hotels, cruises, leisure time)
+- Import external booking details via copy/paste
+- Share itineraries with view or edit permissions
+- Automatic conflict detection
+- Time overlap validation
+- Buffer checking for arrivals/departures
+
+**Responsibilities**:
+- Itinerary CRUD operations
+- Item management (add, update, delete)
+- Conflict detection and validation
+- Sharing and permission management
+- Import functionality for external bookings
+- Supplier information tracking
+
+
+### Component 13: AI Assistant Service (AWS Lambda + Bedrock + DynamoDB)
+
+**Purpose**: AI-powered trip planning assistance using AWS Bedrock AgentCore
+
+**AWS Services**:
+- Lambda with Go 1.x runtime (orchestration, prompt management)
+- AWS Bedrock (AgentCore runtime, LLM inference)
+- DynamoDB (short-term and long-term memory stores)
+- S3 (conversation logs, memory snapshots)
+- SQS (asynchronous AI processing)
+
+**Key Features**:
+- Natural language trip planning
+- Personalized recommendations
+- Conflict detection and resolution
+- Itinerary summarization
+- Conversation memory
+- MCP client integration
+
+**Responsibilities**:
+- Process user messages and generate AI responses
+- Generate personalized excursion recommendations
+- Detect conflicts using AI analysis
+- Maintain conversation history
+- Manage short-term and long-term memory
+- Integrate with external tools via MCP
+
+
+### Component 14: Dining & Shopping Service (AWS Lambda + RDS + Google Places API)
+
+**Purpose**: Manages restaurant recommendations, shopping locations, and local products
+
+**AWS Services**:
+- Lambda with Go 1.x runtime (dining/shopping operations)
+- Aurora Serverless v2 PostgreSQL (restaurants, shopping locations, products)
+- Elasticsearch (search and filtering)
+- S3 (images, menus, product catalogs)
+
+**Key Features**:
+- Restaurant recommendations (fine dining, local, fast food)
+- Café and quick bites near ports
+- Shopping mall and market listings
+- Local artisan products
+- Affiliate booking integration
+- Google Places data integration
+- Price level filtering (1-4)
+- Cuisine type filtering
+
+**Responsibilities**:
+- Restaurant CRUD operations
+- Shopping location management
+- Local product catalog
+- Google Places API integration
+- Affiliate link generation
+- Commission tracking for dining/shopping
+- Popularity scoring
+- Reservation URL management
+
+
+### Component 15: Enhanced Recommendation Engine (AWS Lambda + SageMaker + Elasticsearch)
+
+**Purpose**: Advanced recommendation system combining context, behavior, and popularity signals
+
+**AWS Services**:
+- Lambda with Go 1.x runtime (recommendation logic)
+- SageMaker (ML models for personalization)
+- Elasticsearch (search and ranking)
+- Aurora Serverless v2 PostgreSQL (user behavior, analytics)
+- DynamoDB (real-time user sessions)
+
+**Recommendation Factors**:
+
+1. **Context-Based Logic**:
+   - Destination
+   - Time window (cruise/flight schedule)
+   - Cruise duration
+   - Budget level
+   - Traveler segment (luxury, family, budget, food-focused, adventure)
+
+2. **Behavioral Data**:
+   - Previous bookings
+   - Search history
+   - Click behavior
+   - Time spent on listings
+   - Cart abandonment patterns
+
+3. **Popularity Signals**:
+   - Google ratings
+   - Review counts
+   - Trending searches (Google Trends)
+   - Booking velocity
+   - Seasonal trends
+
+**Key Features**:
+- Personalized excursion ranking
+- Restaurant recommendations by segment
+- Shopping suggestions
+- Cross-selling (e.g., beach club add-on with snorkeling)
+- Upselling opportunities
+- Trending local items
+- Real-time popularity scoring
+
+**Responsibilities**:
+- Multi-factor recommendation scoring
+- User segmentation (luxury, family, budget, food-focused, adventure)
+- Cross-sell and upsell logic
+- Trending item detection
+- Personalized ranking algorithms
+- A/B testing for recommendations
+- Performance analytics
+
+
+### Component 16: Search Integration Service (AWS Lambda + External APIs)
+
+**Purpose**: Integrates external search and popularity data
+
+**AWS Services**:
+- Lambda with Go 1.x runtime (API integration)
+- Aurora Serverless v2 PostgreSQL (cached search data)
+- Elasticsearch (indexed search results)
+- S3 (search data snapshots)
+
+**External Integrations**:
+- Google Places API
+- Google Trends API
+- Review aggregation services
+- Social media trending data
+
+**Key Features**:
+- Google Places data synchronization
+- Trending search keywords
+- Rating aggregation
+- Popular search terms by destination
+- Seasonal trend analysis
+- Competitive pricing intelligence
+
+**Responsibilities**:
+- Google Places API integration
+- Google Trends data collection
+- Rating and review aggregation
+- Popular keyword tracking
+- Search data caching
+- Trend analysis and reporting
+
+
 ## Data Models
 
 **Note**: The data models below represent the JSON structure used for API communication and database storage. In the Go backend, these are implemented as Go structs with appropriate JSON tags. The TypeScript-style notation is used here for documentation clarity and represents the data structure that both the Go backend and TypeScript frontend work with.
@@ -1873,6 +2064,193 @@ interface Category {
 - Review can only be created after booking is completed
 - User can only review once per booking
 - Helpful votes cannot be negative
+
+
+### Itinerary and Sharing
+
+```typescript
+interface Itinerary {
+  id: string                    // UUID
+  ownerUserId: string           // FK to User
+  title: string
+  description?: string
+  isPublic: boolean             // Public visibility
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface ItineraryItem {
+  id: string                    // UUID
+  itineraryId: string           // FK to Itinerary
+  type: 'excursion' | 'flight' | 'hotel' | 'cruise' | 'leisure' | 'other'
+  referenceId?: string          // FK to external record (optional)
+  startTime: Date
+  endTime: Date
+  metadata: {
+    title?: string
+    description?: string
+    supplier?: SupplierInfo
+    bookingRef?: string
+    airline?: string
+    flightNumber?: string
+    hotelName?: string
+    cruiseLine?: string
+    shipName?: string
+    [key: string]: any
+  }
+  createdAt: Date
+}
+
+interface SupplierInfo {
+  name: string
+  email?: string
+  phone?: string
+  website?: string
+  contactPerson?: string
+}
+
+interface ItineraryShare {
+  id: string                    // UUID
+  itineraryId: string           // FK to Itinerary
+  userId: string                // FK to User (shared with)
+  canEdit: boolean              // Edit permission
+  sharedBy: string              // FK to User (who shared)
+  sharedAt: Date
+}
+
+interface Conflict {
+  type: 'time_overlap' | 'insufficient_buffer' | 'supplier_warning' | 'capacity_issue'
+  severity: 'error' | 'warning' | 'info'
+  itemIds: string[]             // Affected item IDs
+  description: string
+  suggestion?: string           // Resolution suggestion
+  detectedAt: Date
+}
+```
+
+**Validation Rules**:
+- Itinerary must have an owner
+- Items must have valid start and end times (end > start)
+- Shared users must exist in the system
+- Owner cannot share with themselves
+- Only owner can modify share permissions
+- Conflicts are automatically detected on item add/update
+
+
+### Dining, Shopping & Local Products
+
+```typescript
+interface Place {
+  id: string                    // UUID
+  googlePlaceId: string         // Google Places ID
+  name: string
+  category: 'restaurant' | 'cafe' | 'shopping' | 'market' | 'attraction'
+  destinationId: string         // FK to Destination
+  rating: number                // Google rating (0-5)
+  reviewCount: number
+  priceLevel: number            // 1-4 ($ to $$$$)
+  latitude: number
+  longitude: number
+  popularityScore: number       // Calculated score
+  address: string
+  phone?: string
+  website?: string
+  openingHours?: string[]
+  photos: string[]
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface Restaurant {
+  id: string                    // UUID
+  placeId: string               // FK to Place
+  name: string
+  destinationId: string         // FK to Destination
+  cuisineType: string[]         // ['Italian', 'Seafood']
+  priceLevel: number            // 1-4
+  googleRating: number
+  isUpscale: boolean
+  reservationUrl?: string       // Affiliate link
+  affiliateCommission: number   // Percentage
+  menuUrl?: string
+  specialties: string[]
+  dressCode?: string
+  acceptsReservations: boolean
+  nearPort: boolean             // Within 2km of port
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface ShoppingLocation {
+  id: string                    // UUID
+  placeId: string               // FK to Place
+  name: string
+  destinationId: string         // FK to Destination
+  type: 'mall' | 'market' | 'boutique' | 'duty_free' | 'artisan'
+  specialtyItems: string[]      // ['jewelry', 'textiles', 'art']
+  popularityScore: number
+  brands: string[]              // For malls/boutiques
+  affiliateUrl?: string
+  affiliateCommission: number
+  dutyFree: boolean
+  acceptsCreditCards: boolean
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface LocalProduct {
+  id: string                    // UUID
+  destinationId: string         // FK to Destination
+  productName: string
+  category: string              // 'jewelry', 'textiles', 'food', 'art'
+  popularityIndex: number       // Trending score
+  averagePrice: number
+  currency: string
+  description: string
+  whereToFind: string[]         // Shopping location IDs
+  seasonality?: string          // 'year_round', 'seasonal'
+  imageUrl: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+interface UserSegment {
+  userId: string                // FK to User
+  segment: 'luxury' | 'family' | 'budget' | 'food_focused' | 'adventure'
+  confidence: number            // 0-1 (ML confidence score)
+  factors: {
+    avgBookingPrice?: number
+    preferredCategories?: string[]
+    travelPartySize?: number
+    bookingFrequency?: number
+  }
+  lastUpdated: Date
+}
+
+interface RecommendationScore {
+  itemId: string                // Excursion, Restaurant, or Shopping ID
+  itemType: 'excursion' | 'restaurant' | 'shopping' | 'product'
+  userId: string
+  score: number                 // 0-100
+  factors: {
+    contextScore: number        // Based on destination, time, budget
+    behaviorScore: number       // Based on user history
+    popularityScore: number     // Based on ratings, trends
+    personalizedScore: number   // ML-based personalization
+  }
+  rank: number
+  generatedAt: Date
+}
+```
+
+**Validation Rules**:
+- Place must have valid Google Place ID
+- Rating must be between 0 and 5
+- Price level must be between 1 and 4
+- Popularity score must be between 0 and 100
+- Affiliate commission must be between 0 and 100
+- User segment confidence must be between 0 and 1
+
 
 ## Algorithmic Pseudocode
 
@@ -2515,6 +2893,178 @@ END
 
 **Loop Invariants:** N/A
 
+
+### Multi-Factor Recommendation Scoring Algorithm
+
+```pascal
+ALGORITHM calculateRecommendationScore(userId, itemId, itemType, context)
+INPUT: userId, itemId, itemType (excursion/restaurant/shopping/product), context
+OUTPUT: RecommendationScore with total score and factor breakdown
+
+BEGIN
+  // Initialize scores
+  contextScore ← 0
+  behaviorScore ← 0
+  popularityScore ← 0
+  personalizedScore ← 0
+  
+  // 1. Context-Based Scoring (Weight: 30%)
+  destination ← context.destination
+  timeWindow ← context.timeWindow
+  budget ← context.budget
+  
+  IF itemType = "excursion" THEN
+    IF item.destination = destination THEN
+      contextScore ← contextScore + 30
+    END IF
+    
+    IF isWithinTimeWindow(item.schedule, timeWindow) THEN
+      contextScore ← contextScore + 40
+    END IF
+    
+    IF item.price <= budget THEN
+      contextScore ← contextScore + 30
+    ELSE IF item.price <= budget * 1.2 THEN
+      contextScore ← contextScore + 15
+    END IF
+  END IF
+  
+  IF itemType = "restaurant" THEN
+    IF item.nearPort AND timeWindow.isShortStop THEN
+      contextScore ← contextScore + 40
+    END IF
+    
+    IF item.priceLevel <= budget.priceLevel THEN
+      contextScore ← contextScore + 30
+    END IF
+    
+    IF item.cuisineType IN context.preferredCuisines THEN
+      contextScore ← contextScore + 30
+    END IF
+  END IF
+  
+  // Normalize to 0-100
+  contextScore ← min(contextScore, 100)
+  
+  // 2. Behavioral Scoring (Weight: 25%)
+  userHistory ← getUserBehavior(userId)
+  
+  // Previous bookings similarity
+  FOR EACH booking IN userHistory.bookings DO
+    IF booking.category = item.category THEN
+      behaviorScore ← behaviorScore + 20
+    END IF
+  END FOR
+  
+  // Search history
+  FOR EACH search IN userHistory.searches DO
+    IF search.keywords OVERLAP item.tags THEN
+      behaviorScore ← behaviorScore + 15
+    END IF
+  END FOR
+  
+  // Click behavior
+  IF item.id IN userHistory.viewedItems THEN
+    behaviorScore ← behaviorScore + 25
+  END IF
+  
+  // Cart abandonment (negative signal)
+  IF item.id IN userHistory.abandonedCart THEN
+    behaviorScore ← behaviorScore - 10
+  END IF
+  
+  // Normalize to 0-100
+  behaviorScore ← clamp(behaviorScore, 0, 100)
+  
+  // 3. Popularity Scoring (Weight: 25%)
+  googleRating ← item.googleRating / 5.0 * 100
+  reviewCount ← min(item.reviewCount / 100 * 100, 100)
+  
+  // Google Trends data
+  trendingScore ← getTrendingScore(item.name, destination)
+  
+  // Booking velocity (for excursions)
+  IF itemType = "excursion" THEN
+    recentBookings ← getBookingCount(item.id, last30Days)
+    velocityScore ← min(recentBookings / 50 * 100, 100)
+  ELSE
+    velocityScore ← 0
+  END IF
+  
+  popularityScore ← (googleRating * 0.4 + 
+                     reviewCount * 0.3 + 
+                     trendingScore * 0.2 + 
+                     velocityScore * 0.1)
+  
+  // 4. Personalized ML Scoring (Weight: 20%)
+  userSegment ← getUserSegment(userId)
+  
+  IF userSegment = "luxury" AND item.priceLevel >= 3 THEN
+    personalizedScore ← personalizedScore + 40
+  END IF
+  
+  IF userSegment = "family" AND item.familyFriendly THEN
+    personalizedScore ← personalizedScore + 40
+  END IF
+  
+  IF userSegment = "food_focused" AND itemType = "restaurant" THEN
+    personalizedScore ← personalizedScore + 50
+  END IF
+  
+  IF userSegment = "adventure" AND item.difficultyLevel IN ["Moderate", "Challenging"] THEN
+    personalizedScore ← personalizedScore + 40
+  END IF
+  
+  // ML model prediction (if available)
+  IF mlModelAvailable THEN
+    mlScore ← predictUserPreference(userId, item)
+    personalizedScore ← (personalizedScore + mlScore) / 2
+  END IF
+  
+  // Normalize to 0-100
+  personalizedScore ← min(personalizedScore, 100)
+  
+  // 5. Calculate weighted total score
+  totalScore ← (contextScore * 0.30 + 
+                behaviorScore * 0.25 + 
+                popularityScore * 0.25 + 
+                personalizedScore * 0.20)
+  
+  // Create recommendation score object
+  recommendation ← {
+    itemId: itemId,
+    itemType: itemType,
+    userId: userId,
+    score: totalScore,
+    factors: {
+      contextScore: contextScore,
+      behaviorScore: behaviorScore,
+      popularityScore: popularityScore,
+      personalizedScore: personalizedScore
+    },
+    generatedAt: now()
+  }
+  
+  RETURN recommendation
+END
+```
+
+**Preconditions:**
+- User exists in the system
+- Item exists and is active
+- Context contains valid destination and time window
+- User behavior data is accessible
+
+**Postconditions:**
+- Returns recommendation score between 0 and 100
+- All factor scores are between 0 and 100
+- Weights sum to 100% (30% + 25% + 25% + 20%)
+
+**Loop Invariants:**
+- For booking history loop: behaviorScore remains between 0 and 100
+- For search history loop: behaviorScore remains between 0 and 100
+
+
 ## Key Functions with Formal Specifications
 
 ### Function 1: validateBookingRequest()
@@ -2963,6 +3513,134 @@ func main() {
 14. **Social Login Uniqueness**: ∀ user: (authProvider = "Facebook" ∧ providerId = X) ⟹ unique user account
 
 15. **Voucher Accessibility**: ∀ booking: (status = "Confirmed") ⟹ (voucherUrl is accessible ∧ QR code is valid)
+
+
+## Revenue Model & Business Strategy
+
+### Multiple Revenue Streams
+
+The platform generates revenue through three primary channels:
+
+1. **Excursion Commission** (Primary)
+   - Commission on direct excursion bookings
+   - Typical range: 15-25% of booking value
+   - Volume-based tier pricing for suppliers
+
+2. **Restaurant Affiliate Commission** (Secondary)
+   - Affiliate fees from restaurant reservation platforms
+   - Commission on completed reservations
+   - Typical range: 5-15% of reservation value
+   - Direct partnerships with upscale restaurants
+
+3. **Shopping Affiliate Commission** (Tertiary)
+   - Affiliate links to shopping locations
+   - Commission on purchases made through platform
+   - Typical range: 3-10% of purchase value
+   - Partnerships with duty-free shops and luxury boutiques
+
+### User Journey & Monetization Flow
+
+```
+User Intent
+   ↓
+Destination Context (cruise/flight/direct)
+   ↓
+Excursion Eligibility Filtering
+   ↓
+Recommendation Engine
+   ├─ Excursions (ranked by score)
+   ├─ Dining (fine dining, local, quick bites)
+   ├─ Shopping (malls, markets, duty-free)
+   └─ Local Products (trending items)
+   ↓
+Personalized Ranking (by user segment)
+   ↓
+User Actions
+   ├─ Excursion Booking → Direct Commission
+   ├─ Restaurant Reservation → Affiliate Commission
+   ├─ Shopping Click → Affiliate Commission
+   └─ Add to Itinerary → Future conversion opportunity
+```
+
+### Destination Page Layout
+
+The destination page is organized to maximize engagement and conversion:
+
+```
+┌─────────────────────────────────────┐
+│  🎯 Excursions Available            │
+│  - Snorkeling Adventure             │
+│  - Jeep Tour                        │
+│  - Cultural Walking Tour            │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│  🍽 Recommended Fine Dining          │
+│  - Oceanfront Seafood Restaurant    │
+│  - Local Cuisine Experience         │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│  ☕ Quick Bites Near Port            │
+│  - Café within 5 min walk           │
+│  - Fast casual options              │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│  🛍 Popular Shopping Spots           │
+│  - Duty-Free Mall                   │
+│  - Local Artisan Market             │
+│  - Luxury Boutiques                 │
+└─────────────────────────────────────┘
+
+┌─────────────────────────────────────┐
+│  ⭐ Trending Local Items             │
+│  - Handcrafted Jewelry              │
+│  - Local Textiles                   │
+│  - Artisan Chocolates               │
+└─────────────────────────────────────┘
+```
+
+### User Segmentation Strategy
+
+The platform identifies and targets five key traveler segments:
+
+1. **Luxury Traveler**
+   - High-end excursions (price level 3-4)
+   - Fine dining recommendations
+   - Luxury boutique shopping
+   - VIP experiences
+
+2. **Family Traveler**
+   - Family-friendly excursions
+   - Kid-friendly restaurants
+   - Safe shopping areas
+   - Educational activities
+
+3. **Budget Traveler**
+   - Value excursions (price level 1-2)
+   - Local eateries
+   - Market shopping
+   - Free/low-cost activities
+
+4. **Food-Focused Traveler**
+   - Culinary excursions
+   - Multiple restaurant recommendations
+   - Food market tours
+   - Local specialty products
+
+5. **Adventure Traveler**
+   - High-intensity excursions
+   - Outdoor dining
+   - Sports equipment shops
+   - Adventure gear
+
+### Cross-Selling & Upselling Strategy
+
+- **Excursion + Dining**: "Complete your snorkeling day with lunch at beachfront restaurant"
+- **Excursion + Shopping**: "Pick up duty-free souvenirs near your tour meeting point"
+- **Restaurant + Shopping**: "Browse local crafts after your dinner reservation"
+- **Product + Location**: "Find authentic [product] at these recommended shops"
 
 
 ## Error Handling

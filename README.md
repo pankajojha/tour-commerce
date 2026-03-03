@@ -213,6 +213,8 @@ aws sso login  --profile AdministratorAccess-727974078184
 
 export CDK_DEFAULT_ACCOUNT=727974078184
 export CDK_DEFAULT_REGION=us-east-1
+export AWS_PROFILE=AdministratorAccess-727974078184
+
 
 cd ~/tour-agent
 git add infrastructure/lib/stacks/database-schema-stack.ts
