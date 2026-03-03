@@ -221,3 +221,6 @@ npm --workspace=infrastructure run synth
 
 
 rm -rf node_modules package-lock.json infrastructure/node_modules infrastructure/package-lock.json && npm install && npm --workspace=infrastructure run synth 2>&1 | grep -i "EBADENGINE\|deprecated" | head -10
+
+
+React 18 with TypeScript, Vite, and Tailwind CSS
