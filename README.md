@@ -211,8 +211,11 @@ For issues and questions, please refer to the documentation in the `.kiro/specs/
 aws sts get-caller-identity --profile AdministratorAccess-727974078184
 aws sso login  --profile AdministratorAccess-727974078184
 
+https://d-906603d3bd.awsapps.com/start/#/
 export CDK_DEFAULT_ACCOUNT=727974078184
 export CDK_DEFAULT_REGION=us-east-1
+export AWS_PROFILE=AdministratorAccess-727974078184
+
 
 cd ~/tour-agent
 git add infrastructure/lib/stacks/database-schema-stack.ts
