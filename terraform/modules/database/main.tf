@@ -48,7 +48,7 @@ resource "aws_rds_cluster_parameter_group" "main" {
 resource "aws_rds_cluster" "main" {
   cluster_identifier      = "tour-agent-database"
   engine                  = "aurora-postgresql"
-  engine_version          = "15.4"
+  engine_version          = "15.8"
   database_name           = var.database_name
   master_username         = jsondecode(aws_secretsmanager_secret_version.database_credentials.secret_string)["username"]
   master_password         = jsondecode(aws_secretsmanager_secret_version.database_credentials.secret_string)["password"]
