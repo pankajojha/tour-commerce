@@ -33,7 +33,7 @@ The platform uses AWS serverless architecture:
 ## Repository Structure
 
 ```
-tour-agent-platform/
+explorer-agent-platform/
 ├── infrastructure/          # AWS CDK infrastructure code
 │   ├── bin/                # CDK app entry point
 │   ├── lib/stacks/         # CDK stack definitions
@@ -79,7 +79,7 @@ This will deploy:
 1. **Update Stripe API Key**:
    ```bash
    aws secretsmanager update-secret \
-     --secret-id tour-agent/stripe/api-key \
+     --secret-id explorer-agent/stripe/api-key \
      --secret-string "your-stripe-api-key"
    ```
 
@@ -217,7 +217,7 @@ export CDK_DEFAULT_REGION=us-east-1
 export AWS_PROFILE=AdministratorAccess-727974078184
 
 
-cd ~/tour-agent
+cd ~/explorer-agent
 git add infrastructure/lib/stacks/database-schema-stack.ts
 git commit -m "feat(cdk): enable local bundling for Lambda to avoid Docker permission issues"
 npm --workspace=infrastructure run synth

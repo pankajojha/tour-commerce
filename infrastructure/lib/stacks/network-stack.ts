@@ -12,8 +12,8 @@ export class NetworkStack extends cdk.Stack {
     super(scope, id, props);
 
     // Create VPC with public and private subnets
-    this.vpc = new ec2.Vpc(this, 'TourAgentVpc', {
-      vpcName: 'tour-agent-vpc',
+    this.vpc = new ec2.Vpc(this, 'ExplorerAgentVpc', {
+      vpcName: 'explorer-agent-vpc',
       maxAzs: 3,
       natGateways: 1, // Single NAT Gateway for cost optimization
       ipAddresses: ec2.IpAddresses.cidr('10.0.0.0/16'),
@@ -42,7 +42,7 @@ export class NetworkStack extends cdk.Stack {
     this.lambdaSecurityGroup = new ec2.SecurityGroup(this, 'LambdaSecurityGroup', {
       vpc: this.vpc,
       description: 'Security group for Lambda functions',
-      securityGroupName: 'tour-agent-lambda-sg',
+      securityGroupName: 'explorer-agent-lambda-sg',
       allowAllOutbound: true,
     });
 
@@ -50,7 +50,7 @@ export class NetworkStack extends cdk.Stack {
     this.databaseSecurityGroup = new ec2.SecurityGroup(this, 'DatabaseSecurityGroup', {
       vpc: this.vpc,
       description: 'Security group for Aurora Serverless v2 PostgreSQL',
-      securityGroupName: 'tour-agent-database-sg',
+      securityGroupName: 'explorer-agent-database-sg',
       allowAllOutbound: false,
     });
 
@@ -65,7 +65,7 @@ export class NetworkStack extends cdk.Stack {
     this.cacheSecurityGroup = new ec2.SecurityGroup(this, 'CacheSecurityGroup', {
       vpc: this.vpc,
       description: 'Security group for ElastiCache Redis',
-      securityGroupName: 'tour-agent-cache-sg',
+      securityGroupName: 'explorer-agent-cache-sg',
       allowAllOutbound: false,
     });
 
@@ -89,25 +89,25 @@ export class NetworkStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'VpcId', {
       value: this.vpc.vpcId,
       description: 'VPC ID',
-      exportName: 'TourAgentVpcId',
+      exportName: 'ExplorerAgentVpcId',
     });
 
     new cdk.CfnOutput(this, 'LambdaSecurityGroupId', {
       value: this.lambdaSecurityGroup.securityGroupId,
       description: 'Lambda Security Group ID',
-      exportName: 'TourAgentLambdaSecurityGroupId',
+      exportName: 'ExplorerAgentLambdaSecurityGroupId',
     });
 
     new cdk.CfnOutput(this, 'DatabaseSecurityGroupId', {
       value: this.databaseSecurityGroup.securityGroupId,
       description: 'Database Security Group ID',
-      exportName: 'TourAgentDatabaseSecurityGroupId',
+      exportName: 'ExplorerAgentDatabaseSecurityGroupId',
     });
 
     new cdk.CfnOutput(this, 'CacheSecurityGroupId', {
       value: this.cacheSecurityGroup.securityGroupId,
       description: 'Cache Security Group ID',
-      exportName: 'TourAgentCacheSecurityGroupId',
+      exportName: 'ExplorerAgentCacheSecurityGroupId',
     });
   }
 }

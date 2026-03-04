@@ -1,16 +1,16 @@
 # ElastiCache Subnet Group
 resource "aws_elasticache_subnet_group" "main" {
-  name       = "tour-agent-cache-subnet-group"
+  name       = "explorer-agent-cache-subnet-group"
   subnet_ids = var.private_subnet_ids
 
   tags = {
-    Name = "tour-agent-cache-subnet-group"
+    Name = "explorer-agent-cache-subnet-group"
   }
 }
 
 # ElastiCache Parameter Group
 resource "aws_elasticache_parameter_group" "main" {
-  name   = "tour-agent-redis7"
+  name   = "explorer-agent-redis7"
   family = "redis7"
 
   parameter {
@@ -26,7 +26,7 @@ data "aws_secretsmanager_secret_version" "redis_auth_token" {
 
 # ElastiCache Redis Replication Group
 resource "aws_elasticache_replication_group" "main" {
-  replication_group_id       = "tour-agent-redis"
+  replication_group_id       = "explorer-agent-redis"
   description                = "Redis cluster for inventory locking"
   engine                     = "redis"
   engine_version             = "7.0"
@@ -48,6 +48,6 @@ resource "aws_elasticache_replication_group" "main" {
   auto_minor_version_upgrade = true
 
   tags = {
-    Name = "tour-agent-redis"
+    Name = "explorer-agent-redis"
   }
 }

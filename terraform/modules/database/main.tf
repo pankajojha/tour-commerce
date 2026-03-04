@@ -1,6 +1,6 @@
 # Database Credentials Secret
 resource "aws_secretsmanager_secret" "database_credentials" {
-  name        = "tour-agent/database/credentials"
+  name        = "explorer-agent/database/credentials"
   description = "Aurora Serverless v2 PostgreSQL credentials"
 }
 
@@ -19,17 +19,17 @@ resource "random_password" "database_password" {
 
 # DB Subnet Group
 resource "aws_db_subnet_group" "main" {
-  name       = "tour-agent-db-subnet-group"
+  name       = "explorer-agent-db-subnet-group"
   subnet_ids = var.isolated_subnet_ids
 
   tags = {
-    Name = "tour-agent-db-subnet-group"
+    Name = "explorer-agent-db-subnet-group"
   }
 }
 
 # RDS Cluster Parameter Group
 resource "aws_rds_cluster_parameter_group" "main" {
-  name        = "tour-agent-aurora-postgres15"
+  name        = "explorer-agent-aurora-postgres15"
   family      = "aurora-postgresql15"
   description = "Aurora PostgreSQL 15 cluster parameter group"
 
@@ -46,7 +46,7 @@ resource "aws_rds_cluster_parameter_group" "main" {
 
 # Aurora Serverless v2 Cluster
 resource "aws_rds_cluster" "main" {
-  cluster_identifier      = "tour-agent-database"
+  cluster_identifier      = "explorer-agent-database"
   engine                  = "aurora-postgresql"
   engine_version          = "15.8"
   database_name           = var.database_name
@@ -61,7 +61,7 @@ resource "aws_rds_cluster" "main" {
   enabled_cloudwatch_logs_exports = ["postgresql"]
   deletion_protection     = true
   skip_final_snapshot     = false
-  final_snapshot_identifier = "tour-agent-database-final-snapshot"
+  final_snapshot_identifier = "explorer-agent-database-final-snapshot"
   
   db_cluster_parameter_group_name = aws_rds_cluster_parameter_group.main.name
 
@@ -71,13 +71,13 @@ resource "aws_rds_cluster" "main" {
   }
 
   tags = {
-    Name = "tour-agent-database"
+    Name = "explorer-agent-database"
   }
 }
 
 # Aurora Serverless v2 Writer Instance
 resource "aws_rds_cluster_instance" "writer" {
-  identifier              = "tour-agent-database-writer"
+  identifier              = "explorer-agent-database-writer"
   cluster_identifier      = aws_rds_cluster.main.id
   instance_class          = "db.serverless"
   engine                  = aws_rds_cluster.main.engine
@@ -86,13 +86,13 @@ resource "aws_rds_cluster_instance" "writer" {
   publicly_accessible     = false
 
   tags = {
-    Name = "tour-agent-database-writer"
+    Name = "explorer-agent-database-writer"
   }
 }
 
 # Aurora Serverless v2 Reader Instance
 resource "aws_rds_cluster_instance" "reader" {
-  identifier              = "tour-agent-database-reader1"
+  identifier              = "explorer-agent-database-reader1"
   cluster_identifier      = aws_rds_cluster.main.id
   instance_class          = "db.serverless"
   engine                  = aws_rds_cluster.main.engine
@@ -101,6 +101,6 @@ resource "aws_rds_cluster_instance" "reader" {
   publicly_accessible     = false
 
   tags = {
-    Name = "tour-agent-database-reader1"
+    Name = "explorer-agent-database-reader1"
   }
 }

@@ -20,7 +20,7 @@ export class DatabaseStack extends cdk.Stack {
 
     // Database credentials secret
     this.databaseCredentialsSecret = new secretsmanager.Secret(this, 'DatabaseCredentials', {
-      secretName: 'tour-agent/database/credentials',
+      secretName: 'explorer-agent/database/credentials',
       description: 'Aurora Serverless v2 PostgreSQL credentials',
       generateSecretString: {
         secretStringTemplate: JSON.stringify({ username: 'postgres' }),
@@ -34,7 +34,7 @@ export class DatabaseStack extends cdk.Stack {
     });
 
     // Aurora Serverless v2 PostgreSQL cluster
-    this.cluster = new rds.DatabaseCluster(this, 'TourAgentDatabase', {
+    this.cluster = new rds.DatabaseCluster(this, 'ExplorerAgentDatabase', {
       engine: rds.DatabaseClusterEngine.auroraPostgres({
         version: rds.AuroraPostgresEngineVersion.VER_15_4,
       }),
@@ -57,7 +57,7 @@ export class DatabaseStack extends cdk.Stack {
       securityGroups: [props.databaseSecurityGroup],
       storageEncrypted: true,
       storageEncryptionKey: props.kmsKey,
-      defaultDatabaseName: 'touragent',
+      defaultDatabaseName: 'exploreragent',
       backup: {
         retention: cdk.Duration.days(7),
         preferredWindow: '03:00-04:00', // UTC
@@ -79,31 +79,31 @@ export class DatabaseStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'DatabaseClusterEndpoint', {
       value: this.cluster.clusterEndpoint.hostname,
       description: 'Aurora Serverless v2 cluster endpoint',
-      exportName: 'TourAgentDatabaseClusterEndpoint',
+      exportName: 'ExplorerAgentDatabaseClusterEndpoint',
     });
 
     new cdk.CfnOutput(this, 'DatabaseClusterReadEndpoint', {
       value: this.cluster.clusterReadEndpoint.hostname,
       description: 'Aurora Serverless v2 read endpoint',
-      exportName: 'TourAgentDatabaseClusterReadEndpoint',
+      exportName: 'ExplorerAgentDatabaseClusterReadEndpoint',
     });
 
     new cdk.CfnOutput(this, 'DatabaseName', {
-      value: 'touragent',
+      value: 'exploreragent',
       description: 'Database name',
-      exportName: 'TourAgentDatabaseName',
+      exportName: 'ExplorerAgentDatabaseName',
     });
 
     new cdk.CfnOutput(this, 'DatabasePort', {
       value: this.cluster.clusterEndpoint.port.toString(),
       description: 'Database port',
-      exportName: 'TourAgentDatabasePort',
+      exportName: 'ExplorerAgentDatabasePort',
     });
 
     new cdk.CfnOutput(this, 'DatabaseCredentialsSecretArn', {
       value: this.databaseCredentialsSecret.secretArn,
       description: 'Database credentials secret ARN',
-      exportName: 'TourAgentDatabaseCredentialsSecretArn',
+      exportName: 'ExplorerAgentDatabaseCredentialsSecretArn',
     });
   }
 }

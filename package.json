@@ -1,7 +1,7 @@
 {
-  "name": "tour-agent-platform",
+  "name": "explorer-agent-platform",
   "version": "1.0.0",
-  "description": "Tour excursion booking platform with AWS serverless architecture",
+  "description": "Explorer excursion booking platform with AWS serverless architecture",
   "private": true,
   "workspaces": [
     "infrastructure",
@@ -18,7 +18,7 @@
     "synth:infra": "cd infrastructure && npm run synth"
   },
   "keywords": [
-    "tour",
+    "explorer",
     "booking",
     "excursion",
     "aws",

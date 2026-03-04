@@ -1,6 +1,6 @@
-# Tour Agent Platform - Terraform Infrastructure
+# Explorer Agent Platform - Terraform Infrastructure
 
-This directory contains Terraform configuration for deploying the Tour Agent Platform infrastructure on AWS.
+This directory contains Terraform configuration for deploying the Explorer Agent Platform infrastructure on AWS.
 
 ## Architecture
 

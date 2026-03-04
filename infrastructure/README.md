@@ -43,13 +43,13 @@ npm run deploy
 ### Deploy specific stack
 
 ```bash
-cdk deploy TourAgentNetworkStack
-cdk deploy TourAgentSecurityStack
-cdk deploy TourAgentDatabaseStack
-cdk deploy TourAgentDatabaseSchemaStack
-cdk deploy TourAgentCacheStack
-cdk deploy TourAgentStorageStack
-cdk deploy TourAgentMonitoringStack
+cdk deploy ExplorerAgentNetworkStack
+cdk deploy ExplorerAgentSecurityStack
+cdk deploy ExplorerAgentDatabaseStack
+cdk deploy ExplorerAgentDatabaseSchemaStack
+cdk deploy ExplorerAgentCacheStack
+cdk deploy ExplorerAgentStorageStack
+cdk deploy ExplorerAgentMonitoringStack
 ```
 
 ### Recommended Deployment Order
@@ -58,21 +58,21 @@ For initial deployment, follow this order:
 
 ```bash
 # Step 1: Deploy network infrastructure
-cdk deploy TourAgentNetworkStack
+cdk deploy ExplorerAgentNetworkStack
 
 # Step 2: Deploy security infrastructure
-cdk deploy TourAgentSecurityStack
+cdk deploy ExplorerAgentSecurityStack
 
 # Step 3: Deploy database cluster (creates empty database)
-cdk deploy TourAgentDatabaseStack
+cdk deploy ExplorerAgentDatabaseStack
 
 # Step 4: Deploy database schema (creates tables, indexes, etc.)
-cdk deploy TourAgentDatabaseSchemaStack
+cdk deploy ExplorerAgentDatabaseSchemaStack
 
 # Step 5: Deploy remaining stacks
-cdk deploy TourAgentCacheStack
-cdk deploy TourAgentStorageStack
-cdk deploy TourAgentMonitoringStack
+cdk deploy ExplorerAgentCacheStack
+cdk deploy ExplorerAgentStorageStack
+cdk deploy ExplorerAgentMonitoringStack
 ```
 
 ## Synthesize CloudFormation templates
@@ -153,7 +153,7 @@ The stacks have the following dependencies:
 **Modifying Schema**:
 To add new migrations:
 1. Create new SQL file: `infrastructure/database/migrations/V002__add_new_table.sql`
-2. Deploy schema stack: `cdk deploy TourAgentDatabaseSchemaStack`
+2. Deploy schema stack: `cdk deploy ExplorerAgentDatabaseSchemaStack`
 3. Lambda automatically applies new migration
 
 ### Cache Stack
@@ -195,7 +195,7 @@ To add new migrations:
 1. **Update Stripe API Key**:
    ```bash
    aws secretsmanager update-secret \
-     --secret-id tour-agent/stripe/api-key \
+     --secret-id explorer-agent/stripe/api-key \
      --secret-string "your-stripe-api-key"
    ```
 
@@ -204,7 +204,7 @@ To add new migrations:
    ```bash
    # Get database credentials
    aws secretsmanager get-secret-value \
-     --secret-id tour-agent/database/credentials \
+     --secret-id explorer-agent/database/credentials \
      --query SecretString --output text
    
    # Connect to database and check tables

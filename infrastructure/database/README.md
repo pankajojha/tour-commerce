@@ -83,7 +83,7 @@ CREATE INDEX idx_notifications_user_id ON notifications(user_id);
 
 ```bash
 cd infrastructure
-cdk deploy TourAgentDatabaseSchemaStack
+cdk deploy ExplorerAgentDatabaseSchemaStack
 ```
 
 The Lambda function will automatically detect and apply the new migration.
@@ -131,7 +131,7 @@ Example output:
 ### Check Lambda Logs
 
 ```bash
-aws logs tail /aws/lambda/TourAgentDatabaseSchemaStack-SchemaDeployerFunction --follow
+aws logs tail /aws/lambda/ExplorerAgentDatabaseSchemaStack-SchemaDeployerFunction --follow
 ```
 
 ### Manually Rollback Failed Migration
@@ -150,7 +150,7 @@ If a migration fails and needs to be fixed:
 
 3. Fix the SQL file and redeploy:
    ```bash
-   cdk deploy TourAgentDatabaseSchemaStack
+   cdk deploy ExplorerAgentDatabaseSchemaStack
    ```
 
 ### Force Redeployment

@@ -19,7 +19,7 @@ export class StorageStack extends cdk.Stack {
 
     // S3 bucket for vouchers (PDFs with QR codes)
     this.vouchersBucket = new s3.Bucket(this, 'VouchersBucket', {
-      bucketName: `tour-agent-vouchers-${this.account}`,
+      bucketName: `explorer-agent-vouchers-${this.account}`,
       encryption: s3.BucketEncryption.KMS,
       encryptionKey: props.kmsKey,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -36,7 +36,7 @@ export class StorageStack extends cdk.Stack {
 
     // S3 bucket for static assets (images, documents)
     this.staticAssetsBucket = new s3.Bucket(this, 'StaticAssetsBucket', {
-      bucketName: `tour-agent-assets-${this.account}`,
+      bucketName: `explorer-agent-assets-${this.account}`,
       encryption: s3.BucketEncryption.S3_MANAGED,
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       versioned: false,
@@ -65,7 +65,7 @@ export class StorageStack extends cdk.Stack {
 
     // CloudFront Origin Access Identity for S3
     const originAccessIdentity = new cloudfront.OriginAccessIdentity(this, 'OAI', {
-      comment: 'OAI for tour agent static assets',
+      comment: 'OAI for explorer agent static assets',
     });
 
     // Grant CloudFront read access to static assets bucket
@@ -73,7 +73,7 @@ export class StorageStack extends cdk.Stack {
 
     // CloudFront distribution
     this.distribution = new cloudfront.Distribution(this, 'CDN', {
-      comment: 'CDN for tour agent platform',
+      comment: 'CDN for explorer agent platform',
       defaultBehavior: {
         origin: origins.S3BucketOrigin.withOriginAccessIdentity(this.staticAssetsBucket, {
           originAccessIdentity,
@@ -87,7 +87,7 @@ export class StorageStack extends cdk.Stack {
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100, // US, Canada, Europe
       enableLogging: true,
       logBucket: new s3.Bucket(this, 'CloudFrontLogsBucket', {
-        bucketName: `tour-agent-cloudfront-logs-${this.account}`,
+        bucketName: `explorer-agent-cloudfront-logs-${this.account}`,
         encryption: s3.BucketEncryption.S3_MANAGED,
         blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
         lifecycleRules: [
@@ -107,37 +107,37 @@ export class StorageStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'VouchersBucketName', {
       value: this.vouchersBucket.bucketName,
       description: 'S3 bucket for vouchers',
-      exportName: 'TourAgentVouchersBucketName',
+      exportName: 'ExplorerAgentVouchersBucketName',
     });
 
     new cdk.CfnOutput(this, 'VouchersBucketArn', {
       value: this.vouchersBucket.bucketArn,
       description: 'S3 bucket ARN for vouchers',
-      exportName: 'TourAgentVouchersBucketArn',
+      exportName: 'ExplorerAgentVouchersBucketArn',
     });
 
     new cdk.CfnOutput(this, 'StaticAssetsBucketName', {
       value: this.staticAssetsBucket.bucketName,
       description: 'S3 bucket for static assets',
-      exportName: 'TourAgentStaticAssetsBucketName',
+      exportName: 'ExplorerAgentStaticAssetsBucketName',
     });
 
     new cdk.CfnOutput(this, 'StaticAssetsBucketArn', {
       value: this.staticAssetsBucket.bucketArn,
       description: 'S3 bucket ARN for static assets',
-      exportName: 'TourAgentStaticAssetsBucketArn',
+      exportName: 'ExplorerAgentStaticAssetsBucketArn',
     });
 
     new cdk.CfnOutput(this, 'CloudFrontDistributionId', {
       value: this.distribution.distributionId,
       description: 'CloudFront distribution ID',
-      exportName: 'TourAgentCloudFrontDistributionId',
+      exportName: 'ExplorerAgentCloudFrontDistributionId',
     });
 
     new cdk.CfnOutput(this, 'CloudFrontDomainName', {
       value: this.distribution.distributionDomainName,
       description: 'CloudFront distribution domain name',
-      exportName: 'TourAgentCloudFrontDomainName',
+      exportName: 'ExplorerAgentCloudFrontDomainName',
     });
   }
 }

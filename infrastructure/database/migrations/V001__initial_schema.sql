@@ -1,7 +1,7 @@
 -- ============================================================================
--- Tour Excursion Booking Platform - PostgreSQL Database Schema
+-- Explorer Excursion Booking Platform - PostgreSQL Database Schema
 -- ============================================================================
--- Description: Complete database schema for tour excursion booking platform
+-- Description: Complete database schema for explorer excursion booking platform
 -- Version: 1.0
 -- Database: PostgreSQL 14+
 -- Features: UUID primary keys, JSONB columns, triggers, indexes, pg_cron
@@ -137,7 +137,7 @@ CREATE TABLE suppliers (
     CONSTRAINT valid_supplier_rating CHECK (rating >= 0 AND rating <= 5)
 );
 
-COMMENT ON TABLE suppliers IS 'Tour operators and excursion suppliers';
+COMMENT ON TABLE suppliers IS 'Explorer operators and excursion suppliers';
 COMMENT ON COLUMN suppliers.bank_details IS 'Encrypted bank account information stored as JSONB';
 
 -- ============================================================================
@@ -180,7 +180,7 @@ CREATE TABLE excursions (
     CONSTRAINT valid_max_group_size CHECK (max_group_size > 0 AND max_group_size <= 500)
 );
 
-COMMENT ON TABLE excursions IS 'Tour excursions and activities';
+COMMENT ON TABLE excursions IS 'Explorer excursions and activities';
 COMMENT ON COLUMN excursions.duration_minutes IS 'Duration in minutes (max 1440 = 24 hours)';
 COMMENT ON COLUMN excursions.accessibility IS 'JSONB: accessibility features and notes';
 
@@ -249,7 +249,7 @@ CREATE TABLE flight_arrivals (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON TABLE flight_arrivals IS 'Flight arrival schedules for tour eligibility';
+COMMENT ON TABLE flight_arrivals IS 'Flight arrival schedules for explorer eligibility';
 
 -- ============================================================================
 -- SECTION 6: INVENTORY MANAGEMENT
@@ -658,14 +658,14 @@ COMMENT ON EXTENSION pg_cron IS 'Scheduled job: cleanup-expired-sessions runs ho
 INSERT INTO categories (name, slug, description, display_order) VALUES
     ('Adventure', 'adventure', 'Thrilling outdoor activities and adventures', 1),
     ('Water Sports', 'water-sports', 'Ocean and water-based activities', 2),
-    ('Cultural', 'cultural', 'Cultural experiences and historical tours', 3),
-    ('Nature & Wildlife', 'nature-wildlife', 'Nature tours and wildlife encounters', 4),
+    ('Cultural', 'cultural', 'Cultural experiences and historical explorers', 3),
+    ('Nature & Wildlife', 'nature-wildlife', 'Nature explorers and wildlife encounters', 4),
     ('Food & Drink', 'food-drink', 'Culinary experiences and tastings', 5),
     ('Beach & Relaxation', 'beach-relaxation', 'Beach activities and relaxation', 6),
     ('Family Friendly', 'family-friendly', 'Activities suitable for all ages', 7),
     ('Extreme Sports', 'extreme-sports', 'High-adrenaline extreme activities', 8),
-    ('Shopping', 'shopping', 'Shopping tours and experiences', 9),
-    ('Sightseeing', 'sightseeing', 'City tours and sightseeing', 10)
+    ('Shopping', 'shopping', 'Shopping explorers and experiences', 9),
+    ('Sightseeing', 'sightseeing', 'City explorers and sightseeing', 10)
 ON CONFLICT (slug) DO NOTHING;
 
 -- ============================================================================
@@ -753,7 +753,7 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
-COMMENT ON FUNCTION calculate_flight_earliest_start IS 'Calculates earliest tour start time after flight arrival';
+COMMENT ON FUNCTION calculate_flight_earliest_start IS 'Calculates earliest explorer start time after flight arrival';
 
 -- Function to get available inventory
 CREATE OR REPLACE FUNCTION get_available_inventory(
@@ -940,4 +940,4 @@ VACUUM ANALYZE;
 -- - 2 Database roles for security
 -- - Sample category data
 
-COMMENT ON DATABASE postgres IS 'Tour Excursion Booking Platform - Production Ready Schema v1.0';
+COMMENT ON DATABASE postgres IS 'Explorer Excursion Booking Platform - Production Ready Schema v1.0';

@@ -15,7 +15,7 @@ provider "aws" {
 
   default_tags {
     tags = {
-      Project   = "TourAgentPlatform"
+      Project   = "ExplorerAgentPlatform"
       ManagedBy = "Terraform"
     }
   }
@@ -69,4 +69,55 @@ module "storage" {
 # Monitoring Module
 module "monitoring" {
   source = "./modules/monitoring"
+}
+
+# Auth Module - Cognito User Pool
+module "auth" {
+  source = "./modules/auth"
+
+  environment         = var.environment
+  kms_key_id          = module.security.kms_key_id
+  enable_social_login = var.enable_social_login
+  
+  # Callback URLs
+  web_callback_urls    = var.web_callback_urls
+  web_logout_urls      = var.web_logout_urls
+  mobile_callback_urls = var.mobile_callback_urls
+  mobile_logout_urls   = var.mobile_logout_urls
+  
+  # OAuth credentials (optional - set in terraform.tfvars)
+  google_client_id     = var.google_client_id
+  google_client_secret = var.google_client_secret
+  facebook_app_id      = var.facebook_app_id
+  facebook_app_secret  = var.facebook_app_secret
+  apple_client_id      = var.apple_client_id
+  apple_team_id        = var.apple_team_id
+  apple_key_id         = var.apple_key_id
+  apple_private_key    = var.apple_private_key
+  
+  # Lambda ARNs (empty for now - will be configured later for custom auth)
+  define_auth_challenge_lambda_arn          = ""
+  create_auth_challenge_lambda_arn          = ""
+  verify_auth_challenge_lambda_arn          = ""
+  pre_signup_lambda_arn                     = ""
+  post_confirmation_lambda_arn              = ""
+  pre_token_generation_lambda_arn           = ""
+}
+
+# Auth Lambda Functions
+module "auth_lambdas" {
+  source = "./modules/auth-lambdas"
+
+  user_pool_id              = module.auth.user_pool_id
+  user_pool_arn             = module.auth.user_pool_arn
+  web_client_id             = module.auth.web_client_id
+  database_endpoint         = module.database.cluster_endpoint
+  database_name             = module.database.database_name
+  database_secret_arn       = module.database.database_credentials_secret_arn
+  oauth_secret_arn          = module.auth.oauth_credentials_secret_arn
+  kms_key_arn               = module.security.kms_key_arn
+  private_subnet_ids        = module.network.private_subnet_ids
+  lambda_security_group_id  = module.network.lambda_security_group_id
+  from_email                = var.from_email
+  app_url                   = var.app_url
 }
