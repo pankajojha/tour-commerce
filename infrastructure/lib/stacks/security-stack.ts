@@ -12,16 +12,16 @@ export class SecurityStack extends cdk.Stack {
     super(scope, id, props);
 
     // KMS Key for encryption at rest
-    this.kmsKey = new kms.Key(this, 'TourAgentKmsKey', {
-      description: 'KMS key for tour agent platform encryption',
+    this.kmsKey = new kms.Key(this, 'ExplorerAgentKmsKey', {
+      description: 'KMS key for explorer agent platform encryption',
       enableKeyRotation: true,
-      alias: 'tour-agent-platform',
+      alias: 'explorer-agent-platform',
       removalPolicy: cdk.RemovalPolicy.RETAIN, // Retain key on stack deletion for security
     });
 
     // Stripe API key secret (placeholder - to be updated manually)
     this.stripeApiKeySecret = new secretsmanager.Secret(this, 'StripeApiKey', {
-      secretName: 'tour-agent/stripe/api-key',
+      secretName: 'explorer-agent/stripe/api-key',
       description: 'Stripe API key for payment processing',
       secretStringValue: cdk.SecretValue.unsafePlainText('placeholder-update-after-deployment'),
       encryptionKey: this.kmsKey,
@@ -29,7 +29,7 @@ export class SecurityStack extends cdk.Stack {
 
     // Redis auth token secret
     this.redisAuthTokenSecret = new secretsmanager.Secret(this, 'RedisAuthToken', {
-      secretName: 'tour-agent/redis/auth-token',
+      secretName: 'explorer-agent/redis/auth-token',
       description: 'ElastiCache Redis authentication token',
       generateSecretString: {
         excludePunctuation: true,
@@ -43,25 +43,25 @@ export class SecurityStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'KmsKeyId', {
       value: this.kmsKey.keyId,
       description: 'KMS Key ID',
-      exportName: 'TourAgentKmsKeyId',
+      exportName: 'ExplorerAgentKmsKeyId',
     });
 
     new cdk.CfnOutput(this, 'KmsKeyArn', {
       value: this.kmsKey.keyArn,
       description: 'KMS Key ARN',
-      exportName: 'TourAgentKmsKeyArn',
+      exportName: 'ExplorerAgentKmsKeyArn',
     });
 
     new cdk.CfnOutput(this, 'StripeApiKeySecretArn', {
       value: this.stripeApiKeySecret.secretArn,
       description: 'Stripe API key secret ARN',
-      exportName: 'TourAgentStripeApiKeySecretArn',
+      exportName: 'ExplorerAgentStripeApiKeySecretArn',
     });
 
     new cdk.CfnOutput(this, 'RedisAuthTokenSecretArn', {
       value: this.redisAuthTokenSecret.secretArn,
       description: 'Redis auth token secret ARN',
-      exportName: 'TourAgentRedisAuthTokenSecretArn',
+      exportName: 'ExplorerAgentRedisAuthTokenSecretArn',
     });
   }
 }

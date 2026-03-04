@@ -115,7 +115,7 @@ export class DatabaseSchemaStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'SchemaDeployerFunctionArn', {
       value: this.schemaDeployerFunction.functionArn,
       description: 'ARN of the schema deployer Lambda function',
-      exportName: 'TourAgentSchemaDeployerFunctionArn',
+      exportName: 'ExplorerAgentSchemaDeployerFunctionArn',
     });
 
     new cdk.CfnOutput(this, 'SchemaDeploymentStatus', {

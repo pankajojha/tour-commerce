@@ -22,12 +22,12 @@ export class CacheStack extends cdk.Stack {
       subnetIds: props.vpc.selectSubnets({
         subnetType: ec2.SubnetType.PRIVATE_ISOLATED,
       }).subnetIds,
-      cacheSubnetGroupName: 'tour-agent-redis-subnet-group',
+      cacheSubnetGroupName: 'explorer-agent-redis-subnet-group',
     });
 
     // ElastiCache Redis cluster with encryption
     this.replicationGroup = new elasticache.CfnReplicationGroup(this, 'RedisCluster', {
-      replicationGroupId: 'tour-agent-redis',
+      replicationGroupId: 'explorer-agent-redis',
       replicationGroupDescription: 'Redis cluster for inventory locking',
       engine: 'redis',
       engineVersion: '7.0',
@@ -41,7 +41,7 @@ export class CacheStack extends cdk.Stack {
       kmsKeyId: props.kmsKey.keyId,
       transitEncryptionEnabled: true,
       authToken: cdk.Fn.sub(
-        '{{resolve:secretsmanager:tour-agent/redis/auth-token:SecretString:::}}'
+        '{{resolve:secretsmanager:explorer-agent/redis/auth-token:SecretString:::}}'
       ),
       port: 6379,
       preferredMaintenanceWindow: 'sun:05:00-sun:06:00', // UTC
@@ -53,7 +53,7 @@ export class CacheStack extends cdk.Stack {
           destinationType: 'cloudwatch-logs',
           destinationDetails: {
             cloudWatchLogsDetails: {
-              logGroup: '/aws/elasticache/tour-agent-redis',
+              logGroup: '/aws/elasticache/explorer-agent-redis',
             },
           },
           logFormat: 'json',
@@ -68,19 +68,19 @@ export class CacheStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'RedisPrimaryEndpoint', {
       value: this.replicationGroup.attrPrimaryEndPointAddress,
       description: 'Redis primary endpoint address',
-      exportName: 'TourAgentRedisPrimaryEndpoint',
+      exportName: 'ExplorerAgentRedisPrimaryEndpoint',
     });
 
     new cdk.CfnOutput(this, 'RedisReaderEndpoint', {
       value: this.replicationGroup.attrReaderEndPointAddress,
       description: 'Redis reader endpoint address',
-      exportName: 'TourAgentRedisReaderEndpoint',
+      exportName: 'ExplorerAgentRedisReaderEndpoint',
     });
 
     new cdk.CfnOutput(this, 'RedisPort', {
       value: this.replicationGroup.attrPrimaryEndPointPort,
       description: 'Redis port',
-      exportName: 'TourAgentRedisPort',
+      exportName: 'ExplorerAgentRedisPort',
     });
   }
 }

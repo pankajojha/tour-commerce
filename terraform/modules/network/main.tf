@@ -5,7 +5,7 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = {
-    Name = "tour-agent-vpc"
+    Name = "explorer-agent-vpc"
   }
 }
 
@@ -14,7 +14,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "tour-agent-igw"
+    Name = "explorer-agent-igw"
   }
 }
 
@@ -27,7 +27,7 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = {
-    Name = "tour-agent-public-${var.availability_zones[count.index]}"
+    Name = "explorer-agent-public-${var.availability_zones[count.index]}"
     Type = "Public"
   }
 }
@@ -40,7 +40,7 @@ resource "aws_subnet" "private" {
   availability_zone = var.availability_zones[count.index]
 
   tags = {
-    Name = "tour-agent-private-${var.availability_zones[count.index]}"
+    Name = "explorer-agent-private-${var.availability_zones[count.index]}"
     Type = "Private"
   }
 }
@@ -53,7 +53,7 @@ resource "aws_subnet" "isolated" {
   availability_zone = var.availability_zones[count.index]
 
   tags = {
-    Name = "tour-agent-isolated-${var.availability_zones[count.index]}"
+    Name = "explorer-agent-isolated-${var.availability_zones[count.index]}"
     Type = "Isolated"
   }
 }
@@ -63,7 +63,7 @@ resource "aws_eip" "nat" {
   domain = "vpc"
 
   tags = {
-    Name = "tour-agent-nat-eip"
+    Name = "explorer-agent-nat-eip"
   }
 }
 
@@ -72,7 +72,7 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[0].id
 
   tags = {
-    Name = "tour-agent-nat"
+    Name = "explorer-agent-nat"
   }
 
   depends_on = [aws_internet_gateway.main]
@@ -88,7 +88,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = {
-    Name = "tour-agent-public-rt"
+    Name = "explorer-agent-public-rt"
   }
 }
 
@@ -101,7 +101,7 @@ resource "aws_route_table" "private" {
   }
 
   tags = {
-    Name = "tour-agent-private-rt"
+    Name = "explorer-agent-private-rt"
   }
 }
 
@@ -109,7 +109,7 @@ resource "aws_route_table" "isolated" {
   vpc_id = aws_vpc.main.id
 
   tags = {
-    Name = "tour-agent-isolated-rt"
+    Name = "explorer-agent-isolated-rt"
   }
 }
 
@@ -138,7 +138,7 @@ resource "aws_vpc_endpoint" "s3" {
   service_name = "com.amazonaws.${var.aws_region}.s3"
 
   tags = {
-    Name = "tour-agent-s3-endpoint"
+    Name = "explorer-agent-s3-endpoint"
   }
 }
 
@@ -152,7 +152,7 @@ resource "aws_vpc_endpoint" "dynamodb" {
   service_name = "com.amazonaws.${var.aws_region}.dynamodb"
 
   tags = {
-    Name = "tour-agent-dynamodb-endpoint"
+    Name = "explorer-agent-dynamodb-endpoint"
   }
 }
 
@@ -163,7 +163,7 @@ resource "aws_vpc_endpoint_route_table_association" "dynamodb_private" {
 
 # Security Groups
 resource "aws_security_group" "lambda" {
-  name        = "tour-agent-lambda-sg"
+  name        = "explorer-agent-lambda-sg"
   description = "Security group for Lambda functions"
   vpc_id      = aws_vpc.main.id
 
@@ -175,17 +175,17 @@ resource "aws_security_group" "lambda" {
   }
 
   tags = {
-    Name = "tour-agent-lambda-sg"
+    Name = "explorer-agent-lambda-sg"
   }
 }
 
 resource "aws_security_group" "database" {
-  name        = "tour-agent-database-sg"
+  name        = "explorer-agent-database-sg"
   description = "Security group for Aurora Serverless v2 PostgreSQL"
   vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name = "tour-agent-database-sg"
+    Name = "explorer-agent-database-sg"
   }
 }
 
@@ -200,12 +200,12 @@ resource "aws_security_group_rule" "database_from_lambda" {
 }
 
 resource "aws_security_group" "cache" {
-  name        = "tour-agent-cache-sg"
+  name        = "explorer-agent-cache-sg"
   description = "Security group for ElastiCache Redis"
   vpc_id      = aws_vpc.main.id
 
   tags = {
-    Name = "tour-agent-cache-sg"
+    Name = "explorer-agent-cache-sg"
   }
 }
 

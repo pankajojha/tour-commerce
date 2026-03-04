@@ -18,19 +18,19 @@ const env = {
 };
 
 // Network Stack - VPC, subnets, security groups
-const networkStack = new NetworkStack(app, 'TourAgentNetworkStack', {
+const networkStack = new NetworkStack(app, 'ExplorerAgentNetworkStack', {
   env,
-  description: 'Network infrastructure for tour agent platform',
+  description: 'Network infrastructure for explorer agent platform',
 });
 
 // Security Stack - KMS, Secrets Manager
-const securityStack = new SecurityStack(app, 'TourAgentSecurityStack', {
+const securityStack = new SecurityStack(app, 'ExplorerAgentSecurityStack', {
   env,
   description: 'Security infrastructure including KMS and Secrets Manager',
 });
 
 // Database Stack - Aurora Serverless v2 PostgreSQL
-const databaseStack = new DatabaseStack(app, 'TourAgentDatabaseStack', {
+const databaseStack = new DatabaseStack(app, 'ExplorerAgentDatabaseStack', {
   env,
   description: 'Aurora Serverless v2 PostgreSQL database',
   vpc: networkStack.vpc,
@@ -39,7 +39,7 @@ const databaseStack = new DatabaseStack(app, 'TourAgentDatabaseStack', {
 });
 
 // Database Schema Stack - Automated schema deployment
-const databaseSchemaStack = new DatabaseSchemaStack(app, 'TourAgentDatabaseSchemaStack', {
+const databaseSchemaStack = new DatabaseSchemaStack(app, 'ExplorerAgentDatabaseSchemaStack', {
   env,
   description: 'Database schema deployment with automated migrations',
   vpc: networkStack.vpc,
@@ -50,7 +50,7 @@ const databaseSchemaStack = new DatabaseSchemaStack(app, 'TourAgentDatabaseSchem
 });
 
 // Cache Stack - ElastiCache Redis
-const cacheStack = new CacheStack(app, 'TourAgentCacheStack', {
+const cacheStack = new CacheStack(app, 'ExplorerAgentCacheStack', {
   env,
   description: 'ElastiCache Redis cluster for inventory locking',
   vpc: networkStack.vpc,
@@ -59,18 +59,18 @@ const cacheStack = new CacheStack(app, 'TourAgentCacheStack', {
 });
 
 // Storage Stack - S3, CloudFront
-const storageStack = new StorageStack(app, 'TourAgentStorageStack', {
+const storageStack = new StorageStack(app, 'ExplorerAgentStorageStack', {
   env,
   description: 'S3 buckets and CloudFront distribution',
   kmsKey: securityStack.kmsKey,
 });
 
 // Monitoring Stack - CloudWatch, X-Ray
-const monitoringStack = new MonitoringStack(app, 'TourAgentMonitoringStack', {
+const monitoringStack = new MonitoringStack(app, 'ExplorerAgentMonitoringStack', {
   env,
   description: 'CloudWatch log groups and X-Ray tracing',
 });
 
 // Tags
-cdk.Tags.of(app).add('Project', 'TourAgentPlatform');
+cdk.Tags.of(app).add('Project', 'ExplorerAgentPlatform');
 cdk.Tags.of(app).add('ManagedBy', 'CDK');

@@ -1,9 +1,9 @@
 # S3 Bucket for static assets
 resource "aws_s3_bucket" "assets" {
-  bucket = "tour-agent-assets-${data.aws_caller_identity.current.account_id}"
+  bucket = "explorer-agent-assets-${data.aws_caller_identity.current.account_id}"
 
   tags = {
-    Name = "tour-agent-assets"
+    Name = "explorer-agent-assets"
   }
 }
 
@@ -37,10 +37,10 @@ resource "aws_s3_bucket_public_access_block" "assets" {
 
 # S3 Bucket for user uploads
 resource "aws_s3_bucket" "uploads" {
-  bucket = "tour-agent-uploads-${data.aws_caller_identity.current.account_id}"
+  bucket = "explorer-agent-uploads-${data.aws_caller_identity.current.account_id}"
 
   tags = {
-    Name = "tour-agent-uploads"
+    Name = "explorer-agent-uploads"
   }
 }
 
@@ -89,8 +89,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
 
 # CloudFront Origin Access Control
 resource "aws_cloudfront_origin_access_control" "main" {
-  name                              = "tour-agent-oac"
-  description                       = "OAC for tour agent assets"
+  name                              = "explorer-agent-oac"
+  description                       = "OAC for explorer agent assets"
   origin_access_control_origin_type = "s3"
   signing_behavior                  = "always"
   signing_protocol                  = "sigv4"
@@ -100,20 +100,20 @@ resource "aws_cloudfront_origin_access_control" "main" {
 resource "aws_cloudfront_distribution" "main" {
   enabled             = true
   is_ipv6_enabled     = true
-  comment             = "Tour agent platform CDN"
+  comment             = "Explorer agent platform CDN"
   default_root_object = "index.html"
   price_class         = "PriceClass_100"
 
   origin {
     domain_name              = aws_s3_bucket.assets.bucket_regional_domain_name
-    origin_id                = "S3-tour-agent-assets"
+    origin_id                = "S3-explorer-agent-assets"
     origin_access_control_id = aws_cloudfront_origin_access_control.main.id
   }
 
   default_cache_behavior {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]
-    target_origin_id       = "S3-tour-agent-assets"
+    target_origin_id       = "S3-explorer-agent-assets"
     viewer_protocol_policy = "redirect-to-https"
     compress               = true
 
@@ -141,7 +141,7 @@ resource "aws_cloudfront_distribution" "main" {
   }
 
   tags = {
-    Name = "tour-agent-cdn"
+    Name = "explorer-agent-cdn"
   }
 }
 

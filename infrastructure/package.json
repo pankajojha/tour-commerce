@@ -1,7 +1,7 @@
 {
-  "name": "tour-agent-infrastructure",
+  "name": "explorer-agent-infrastructure",
   "version": "1.0.0",
-  "description": "AWS CDK infrastructure for tour excursion booking platform",
+  "description": "AWS CDK infrastructure for explorer excursion booking platform",
   "main": "bin/app.js",
   "scripts": {
     "build": "npm exec -- tsc",

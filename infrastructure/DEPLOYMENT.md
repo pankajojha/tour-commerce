@@ -30,10 +30,10 @@ CDK Deploy → Custom Resource → Lambda Function → Read Migrations → Apply
 ```bash
 # 1. Deploy database cluster (creates empty "touragent" database)
 cd infrastructure
-cdk deploy TourAgentDatabaseStack
+cdk deploy ExplorerAgentDatabaseStack
 
 # 2. Deploy schema (creates tables, indexes, functions, etc.)
-cdk deploy TourAgentDatabaseSchemaStack
+cdk deploy ExplorerAgentDatabaseSchemaStack
 ```
 
 ### Subsequent Schema Changes
@@ -43,7 +43,7 @@ cdk deploy TourAgentDatabaseSchemaStack
 # infrastructure/database/migrations/V002__add_feature.sql
 
 # 2. Deploy schema stack
-cdk deploy TourAgentDatabaseSchemaStack
+cdk deploy ExplorerAgentDatabaseSchemaStack
 
 # Lambda automatically detects and applies new migration
 ```
@@ -129,7 +129,7 @@ The system is idempotent - safe to run multiple times:
 Check Lambda logs in CloudWatch:
 
 ```bash
-aws logs tail /aws/lambda/TourAgentDatabaseSchemaStack-SchemaDeployerFunction --follow
+aws logs tail /aws/lambda/ExplorerAgentDatabaseSchemaStack-SchemaDeployerFunction --follow
 ```
 
 ### Rollback Migration
@@ -140,7 +140,7 @@ If a migration fails:
    ```sql
    DELETE FROM schema_migrations WHERE version = '002';
    ```
-3. Redeploy: `cdk deploy TourAgentDatabaseSchemaStack`
+3. Redeploy: `cdk deploy ExplorerAgentDatabaseSchemaStack`
 
 ### Force Redeployment
 
@@ -156,7 +156,7 @@ properties: {
 
 Then deploy:
 ```bash
-cdk deploy TourAgentDatabaseSchemaStack
+cdk deploy ExplorerAgentDatabaseSchemaStack
 ```
 
 ## Best Practices

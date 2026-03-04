@@ -25,7 +25,7 @@ variable "availability_zones" {
 variable "database_name" {
   description = "Default database name"
   type        = string
-  default     = "touragent"
+  default     = "exploreragent"
 }
 
 variable "aurora_min_capacity" {
@@ -38,4 +38,104 @@ variable "aurora_max_capacity" {
   description = "Aurora Serverless v2 maximum capacity (ACU)"
   type        = number
   default     = 128
+}
+
+# Authentication Variables
+variable "enable_social_login" {
+  description = "Enable social login providers"
+  type        = bool
+  default     = false
+}
+
+variable "web_callback_urls" {
+  description = "Callback URLs for web client"
+  type        = list(string)
+  default     = ["http://localhost:3000/auth/callback"]
+}
+
+variable "web_logout_urls" {
+  description = "Logout URLs for web client"
+  type        = list(string)
+  default     = ["http://localhost:3000"]
+}
+
+variable "mobile_callback_urls" {
+  description = "Callback URLs for mobile client"
+  type        = list(string)
+  default     = ["exploreragent://auth/callback"]
+}
+
+variable "mobile_logout_urls" {
+  description = "Logout URLs for mobile client"
+  type        = list(string)
+  default     = ["exploreragent://"]
+}
+
+variable "from_email" {
+  description = "From email address for SES"
+  type        = string
+  default     = "noreply@exploreragent.com"
+}
+
+variable "app_url" {
+  description = "Application URL for magic links"
+  type        = string
+  default     = "http://localhost:3000"
+}
+
+# OAuth Provider Credentials (optional)
+variable "google_client_id" {
+  description = "Google OAuth client ID"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "google_client_secret" {
+  description = "Google OAuth client secret"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "facebook_app_id" {
+  description = "Facebook app ID"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "facebook_app_secret" {
+  description = "Facebook app secret"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "apple_client_id" {
+  description = "Apple client ID (Service ID)"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "apple_team_id" {
+  description = "Apple team ID"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "apple_key_id" {
+  description = "Apple key ID"
+  type        = string
+  default     = ""
+  sensitive   = true
+}
+
+variable "apple_private_key" {
+  description = "Apple private key"
+  type        = string
+  default     = ""
+  sensitive   = true
 }

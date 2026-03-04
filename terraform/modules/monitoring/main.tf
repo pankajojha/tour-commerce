@@ -1,34 +1,34 @@
 # CloudWatch Log Groups
 resource "aws_cloudwatch_log_group" "api_gateway" {
-  name              = "/aws/apigateway/tour-agent"
+  name              = "/aws/apigateway/explorer-agent"
   retention_in_days = 30
 
   tags = {
-    Name = "tour-agent-api-gateway-logs"
+    Name = "explorer-agent-api-gateway-logs"
   }
 }
 
 resource "aws_cloudwatch_log_group" "lambda" {
-  name              = "/aws/lambda/tour-agent"
+  name              = "/aws/lambda/explorer-agent"
   retention_in_days = 7
 
   tags = {
-    Name = "tour-agent-lambda-logs"
+    Name = "explorer-agent-lambda-logs"
   }
 }
 
 resource "aws_cloudwatch_log_group" "ecs" {
-  name              = "/aws/ecs/tour-agent"
+  name              = "/aws/ecs/explorer-agent"
   retention_in_days = 7
 
   tags = {
-    Name = "tour-agent-ecs-logs"
+    Name = "explorer-agent-ecs-logs"
   }
 }
 
 # CloudWatch Alarms for Database
 resource "aws_cloudwatch_metric_alarm" "database_cpu" {
-  alarm_name          = "tour-agent-database-high-cpu"
+  alarm_name          = "explorer-agent-database-high-cpu"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   metric_name         = "CPUUtilization"
@@ -40,12 +40,12 @@ resource "aws_cloudwatch_metric_alarm" "database_cpu" {
   treat_missing_data  = "notBreaching"
 
   tags = {
-    Name = "tour-agent-database-cpu-alarm"
+    Name = "explorer-agent-database-cpu-alarm"
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "database_connections" {
-  alarm_name          = "tour-agent-database-high-connections"
+  alarm_name          = "explorer-agent-database-high-connections"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   metric_name         = "DatabaseConnections"
@@ -57,13 +57,13 @@ resource "aws_cloudwatch_metric_alarm" "database_connections" {
   treat_missing_data  = "notBreaching"
 
   tags = {
-    Name = "tour-agent-database-connections-alarm"
+    Name = "explorer-agent-database-connections-alarm"
   }
 }
 
 # CloudWatch Alarms for Cache
 resource "aws_cloudwatch_metric_alarm" "cache_cpu" {
-  alarm_name          = "tour-agent-cache-high-cpu"
+  alarm_name          = "explorer-agent-cache-high-cpu"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   metric_name         = "CPUUtilization"
@@ -75,12 +75,12 @@ resource "aws_cloudwatch_metric_alarm" "cache_cpu" {
   treat_missing_data  = "notBreaching"
 
   tags = {
-    Name = "tour-agent-cache-cpu-alarm"
+    Name = "explorer-agent-cache-cpu-alarm"
   }
 }
 
 resource "aws_cloudwatch_metric_alarm" "cache_memory" {
-  alarm_name          = "tour-agent-cache-high-memory"
+  alarm_name          = "explorer-agent-cache-high-memory"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   metric_name         = "DatabaseMemoryUsagePercentage"
@@ -92,6 +92,6 @@ resource "aws_cloudwatch_metric_alarm" "cache_memory" {
   treat_missing_data  = "notBreaching"
 
   tags = {
-    Name = "tour-agent-cache-memory-alarm"
+    Name = "explorer-agent-cache-memory-alarm"
   }
 }
