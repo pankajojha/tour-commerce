@@ -11,14 +11,16 @@ The Tour Excursion Booking Platform is a comprehensive AWS-based system that ena
 - **AI-Powered Recommendations**: Context-based ranking combining destination, time windows, behavioral data, and popularity signals
 - **Dynamic Pricing**: Real-time pricing based on demand, seasonality, and capacity
 - **Multi-Channel Authentication**: Social media login (Google, Microsoft, Facebook, Instagram, TikTok, LinkedIn) and passwordless flows via AWS Cognito
-- **AI-Powered Assistance**: AgentCore runtime powered by AWS Bedrock for trip planning, recommendations, and conflict detection
+- **AI-Powered Assistance**: Decoupled AgentCore service powered by AWS Bedrock for conversational trip planning, recommendations, and conflict detection (see [AgentCore Architecture](./agentcore-architecture.md))
 - **Sharing & Collaboration**: Users can share itineraries with friends and family with view or edit permissions
 - **Partner Excursions**: Direct sales of partner shore excursions configured via MCP tools
 - **Search Integration**: Google Places data, Google Trends, ratings, and popular search keywords
 
 The system integrates with cruise schedule feeds, flight APIs, payment gateways, Google Places API, and affiliate networks to provide a seamless booking experience while ensuring operational safeguards like timezone-aware logic, booking cut-offs, overbooking prevention, and automatic conflict detection.
 
-The architecture leverages AWS managed services for scalability, reliability, and cost-effectiveness, including API Gateway for API management, Lambda with Go runtime for serverless compute, Aurora Serverless v2 PostgreSQL for all persistent data with auto-scaling capabilities, ElastiCache Redis for inventory locking, Cognito for authentication, EventBridge for event-driven workflows, AWS Bedrock for AI capabilities, Elasticsearch for search and analytics, and SageMaker for recommendations. The frontend is built with React 18+, TypeScript, and Vite with Tailwind CSS, while infrastructure is managed using AWS CDK with TypeScript.
+The architecture leverages AWS managed services for scalability, reliability, and cost-effectiveness, including API Gateway for API management, Lambda with Go runtime for serverless compute, Aurora Serverless v2 PostgreSQL for all persistent data with auto-scaling capabilities, ElastiCache Redis for inventory locking, Cognito for authentication, EventBridge for event-driven workflows, AWS Bedrock AgentCore for AI capabilities with dedicated gateway and guardrails, and Elasticsearch for search, analytics, and recommendations. The frontend is built with React 18+, TypeScript, and Vite with Tailwind CSS, while infrastructure is managed using AWS CDK with TypeScript.
+
+**For detailed AgentCore architecture including Guardrails, Prompt Management, MCP integration, and Memory Strategies, see [AgentCore Architecture Document](./agentcore-architecture.md).**
 
 ## Technology Stack
 
@@ -40,15 +42,27 @@ The architecture leverages AWS managed services for scalability, reliability, an
 - This is standard practice for AWS CDK and remains in TypeScript
 
 **Database & Storage**:
-- Primary Database: Aurora Serverless v2 PostgreSQL
+- Primary Database: Aurora Serverless v2 PostgreSQL (all persistent data including AI memory)
 - Cache: ElastiCache Redis
 - Object Storage: Amazon S3 (assets, conversation logs, memory snapshots)
 - Search: Amazon OpenSearch / Elasticsearch
 - Analytics: Separate analytics database for reporting
-- AI Memory: DynamoDB or S3 for short/long-term memory stores
+
+**AI & Machine Learning**:
+- AI Runtime: AWS Bedrock AgentCore for conversational AI and trip planning
+- Foundation Model: Claude 3 (Anthropic) or similar via AWS Bedrock
+- Memory Management: Aurora PostgreSQL for conversation context and long-term memory with indexed queries
+- Recommendation Engine: Multi-factor scoring system combining:
+  - Context-based ranking (30%): Destination, time windows, weather, season, group composition
+  - Behavior-based scoring (25%): User booking history, browsing patterns, collaborative filtering
+  - Popularity-based scoring (25%): Booking frequency, review ratings, trending data from Google Trends
+  - Personalization scoring (20%): User segment matching (luxury, family, budget, food-focused, adventure)
+- Search & Analytics: Elasticsearch/OpenSearch for fast recommendation retrieval and trend analysis
+- Natural Language Processing: AWS Bedrock for intent parsing and response generation
 
 **Key Go Libraries**:
 - AWS SDK: github.com/aws/aws-sdk-go-v2
+- AWS Bedrock: github.com/aws/aws-sdk-go-v2/service/bedrockruntime, github.com/aws/aws-sdk-go-v2/service/bedrockagentruntime
 - HTTP Router: github.com/aws/aws-lambda-go
 - Database: github.com/lib/pq, github.com/jmoiron/sqlx
 - Redis: github.com/go-redis/redis/v9
@@ -88,6 +102,14 @@ graph TB
         FLIGHT[Flight Schedule Lambda]
         REC[Recommendation Lambda]
         ADMIN[Admin Service Lambda]
+        ITIN[Itinerary Service Lambda]
+        DINING[Dining & Shopping Lambda]
+        AI[AI Assistant Lambda]
+        SEARCH[Search Integration Lambda]
+    end
+    
+    subgraph ai[AI & ML Layer]
+        BEDROCK[AWS Bedrock AgentCore]
     end
     
     subgraph data[Data Layer]
@@ -110,6 +132,8 @@ graph TB
         CRUISE_API[Cruise Schedule Feeds]
         FLIGHT_API[Flight Schedule APIs]
         SOCIAL[Social Media OAuth]
+        GOOGLE_PLACES[Google Places API]
+        GOOGLE_TRENDS[Google Trends API]
     end
     
     subgraph security[Monitoring & Security]
@@ -150,6 +174,14 @@ graph TB
     FLIGHT --> FLIGHT_API
     REC --> RDS
     REC --> ES
+    ITIN --> RDS
+    DINING --> RDS
+    DINING --> GOOGLE_PLACES
+    SEARCH --> GOOGLE_TRENDS
+    SEARCH --> ES
+    AI --> BEDROCK
+    AI --> RDS
+    AI --> S3
     
     SQS --> EB
     EB --> SNS
@@ -182,7 +214,10 @@ graph TB
 | Event Bus | EventBridge | Event-driven workflows, supplier notifications, inventory updates |
 | Email | SES | Transactional emails, vouchers, confirmations |
 | SMS | Pinpoint | SMS notifications, booking alerts |
-| AI/ML | SageMaker | Recommendation engine, upselling, demand forecasting |
+| Recommendation Engine | Elasticsearch + Aurora PostgreSQL | Multi-factor scoring: 30% context (time/destination), 25% behavior (history/browsing), 25% popularity (bookings/reviews/trends), 20% personalization (user segments) |
+| AI Assistant | AWS Bedrock AgentCore | Conversational AI, trip planning, natural language processing with Claude 3 foundation model |
+| AI Memory | Aurora PostgreSQL | Conversation context and long-term memory with indexed queries and TTL cleanup via pg_cron |
+| Trending Data | Google Trends API + Elasticsearch | Real-time popularity signals, search volume trends, geographic interest patterns |
 | CDN | CloudFront | Global content delivery, low latency, DDoS protection |
 | Security | WAF | SQL injection, XSS protection, rate limiting |
 | Secrets | Secrets Manager | API keys, database credentials, payment gateway tokens |
@@ -1233,13 +1268,12 @@ interface EarliestStartTime {
 - Transfer buffer calculations
 - Airport-to-destination mapping
 
-### Component 10: Recommendation Engine (AWS Lambda + SageMaker + OpenSearch)
+### Component 10: Recommendation Engine (AWS Lambda + OpenSearch)
 
 **Purpose**: AI-powered excursion recommendations and upselling
 
 **AWS Services**:
 - Lambda (recommendation API)
-- SageMaker (ML models for recommendations)
 - OpenSearch (collaborative filtering data)
 - Aurora Serverless v2 PostgreSQL (user behavior, booking history)
 
@@ -1431,16 +1465,53 @@ interface CommissionReport {
 - Supplier information tracking
 
 
-### Component 13: AI Assistant Service (AWS Lambda + Bedrock + DynamoDB)
+### Component 13: AgentCore Service (Decoupled AI Service)
 
-**Purpose**: AI-powered trip planning assistance using AWS Bedrock AgentCore
+**Purpose**: Standalone AI service for conversational trip planning, itinerary management, and personalized recommendations
+
+**Architecture**: Fully decoupled service with dedicated API Gateway, Lambda functions, and data stores. See [AgentCore Architecture](./agentcore-architecture.md) for complete details.
 
 **AWS Services**:
-- Lambda with Go 1.x runtime (orchestration, prompt management)
-- AWS Bedrock (AgentCore runtime, LLM inference)
-- DynamoDB (short-term and long-term memory stores)
-- S3 (conversation logs, memory snapshots)
-- SQS (asynchronous AI processing)
+- API Gateway (dedicated AgentCore Gateway)
+- Lambda with Go 1.x runtime (orchestration, memory management, tool execution)
+- AWS Bedrock (AgentCore runtime with Claude 3)
+- AWS Bedrock Guardrails (PII/PCI compliance)
+- AWS Bedrock Prompt Management (versioned prompts)
+- Aurora Serverless v2 PostgreSQL (short-term and long-term memory)
+- S3 (conversation logs, memory snapshots, successful itineraries)
+- EventBridge (scheduled cleanup tasks)
+
+**Key Components**:
+1. **AgentCore Gateway API**: Dedicated API Gateway with JWT authentication
+2. **AgentCore Runtime**: AWS Bedrock with Claude 3 Sonnet/Haiku
+3. **Guardrails**: PII/PCI filtering, content moderation, prompt attack detection
+4. **Prompt Management**: Versioned prompts for trip planning, recommendations, conflict resolution
+5. **LLM Gateway API**: Abstraction layer for model selection and optimization
+6. **MCP Clients**: Model Context Protocol for external tool access (with guardrail filtering)
+7. **Memory Management**: Structured STM/LTM strategies with Aurora PostgreSQL + S3
+8. **Conversation State**: Track user intent, context, and pending actions
+
+**Memory Strategies**:
+- **Short-Term Memory (STM)**: Last 50 messages, conversation state, pending actions (24-hour TTL)
+- **Long-Term Memory (LTM)**: 
+  - User Preference Memory: Learned preferences with confidence scoring
+  - Semantic Memory: Facts about user (dietary, accessibility, travel style)
+  - Summary Memory: Conversation summaries and key decisions
+  - Successful Itineraries: High-rated itineraries for learning (S3 snapshots)
+
+**Guardrail Policies**:
+- **PII/PCI**: Block credit cards, mask emails/phones/names/addresses
+- **Content Filters**: Block hate speech, insults, sexual content, violence
+- **Denied Topics**: Financial/medical/legal advice, political opinions
+- **Prompt Attacks**: Block jailbreak attempts and prompt injection
+- **MCP Filter**: All tool calls flow through guardrails
+
+**Lambda Functions**:
+1. `agentcore-orchestrator`: Main conversation handler
+2. `agentcore-memory-manager`: Memory load/save operations
+3. `agentcore-mcp-executor`: MCP tool execution with guardrails
+4. `agentcore-itinerary-generator`: AI-powered itinerary generation
+5. `agentcore-cleanup`: Daily conversation cleanup and archival
 
 **Key Features**:
 - Natural language trip planning
@@ -1490,39 +1561,46 @@ interface CommissionReport {
 - Reservation URL management
 
 
-### Component 15: Enhanced Recommendation Engine (AWS Lambda + SageMaker + Elasticsearch)
+### Component 15: Enhanced Recommendation Engine (AWS Lambda + Elasticsearch)
 
 **Purpose**: Advanced recommendation system combining context, behavior, and popularity signals
 
 **AWS Services**:
 - Lambda with Go 1.x runtime (recommendation logic)
-- SageMaker (ML models for personalization)
 - Elasticsearch (search and ranking)
-- Aurora Serverless v2 PostgreSQL (user behavior, analytics)
-- DynamoDB (real-time user sessions)
+- Aurora Serverless v2 PostgreSQL (user behavior, analytics, user sessions)
 
 **Recommendation Factors**:
 
-1. **Context-Based Logic**:
-   - Destination
-   - Time window (cruise/flight schedule)
-   - Cruise duration
-   - Budget level
-   - Traveler segment (luxury, family, budget, food-focused, adventure)
+1. **Context-Based Scoring (30% weight)**:
+   - Destination proximity and relevance
+   - Time window compatibility (cruise/flight schedule)
+   - Cruise/flight duration alignment
+   - Weather and seasonal conditions
+   - Group size and composition
+   - Budget level constraints
 
-2. **Behavioral Data**:
-   - Previous bookings
-   - Search history
-   - Click behavior
+2. **Behavior-Based Scoring (25% weight)**:
+   - Previous booking history and patterns
+   - Search history and preferences
+   - Click behavior and engagement
    - Time spent on listings
    - Cart abandonment patterns
+   - Collaborative filtering (similar users)
 
-3. **Popularity Signals**:
-   - Google ratings
-   - Review counts
-   - Trending searches (Google Trends)
-   - Booking velocity
-   - Seasonal trends
+3. **Popularity-Based Scoring (25% weight)**:
+   - Google ratings and review counts
+   - Booking frequency and velocity
+   - Trending searches (Google Trends integration)
+   - Seasonal popularity patterns
+   - Review sentiment analysis
+
+4. **Personalization Scoring (20% weight)**:
+   - User segment matching (luxury, family, budget, food-focused, adventure)
+   - Stated interests and preferences
+   - Price sensitivity patterns
+   - Activity difficulty preferences
+   - Dietary and accessibility requirements
 
 **Key Features**:
 - Personalized excursion ranking
@@ -4223,7 +4301,6 @@ The platform identifies and targets five key traveler segments:
 | KMS | Encryption | Critical |
 | CloudWatch | Monitoring | High |
 | X-Ray | Tracing | Medium |
-| SageMaker | ML recommendations | Low |
 
 ### External Services
 
@@ -4326,12 +4403,20 @@ The platform identifies and targets five key traveler segments:
 
 ## Summary
 
-This design document provides a comprehensive AWS-based architecture for the Tour Excursion Booking Platform. The system leverages serverless technologies (Lambda with Go 1.x runtime, API Gateway, Aurora Serverless v2) for scalability and cost-effectiveness, with Aurora Serverless v2 providing auto-scaling from 0.5 to 128 ACU and pay-per-use pricing. Redis handles real-time inventory management with atomic operations. Key features include multi-channel authentication with social media login, intelligent time-window filtering for cruise and flight schedules, dynamic pricing, and event-driven workflows for notifications. The architecture prioritizes security (encryption, WAF, Cognito), performance (caching, async processing, auto-scaling), and operational excellence (monitoring, automated testing, disaster recovery).
+This design document provides a comprehensive AWS-based architecture for the Tour Excursion Booking Platform. The system leverages serverless technologies (Lambda with Go 1.x runtime, API Gateway, Aurora Serverless v2) for scalability and cost-effectiveness, with Aurora Serverless v2 providing auto-scaling from 0.5 to 128 ACU and pay-per-use pricing. Redis handles real-time inventory management with atomic operations. 
+
+Key features include multi-channel authentication with social media login, intelligent time-window filtering for cruise and flight schedules, dynamic pricing, and event-driven workflows for notifications. The platform features an AI-powered trip planning assistant using AWS Bedrock AgentCore with Claude 3, comprehensive itinerary management with automatic conflict detection, and an enhanced multi-factor recommendation engine that combines context-based ranking (30%), behavior-based scoring (25%), popularity signals (25%), and personalization (20%) to deliver highly relevant suggestions across excursions, restaurants, and shopping experiences.
+
+The architecture prioritizes security (encryption, WAF, Cognito), performance (caching, async processing, auto-scaling), and operational excellence (monitoring, automated testing, disaster recovery).
 
 **Technology Stack**:
 - **Backend**: Go (Golang) for all Lambda functions
-- **Frontend**: React with TypeScript
+- **Frontend**: React with TypeScript and Tailwind CSS
 - **Infrastructure**: AWS CDK with TypeScript
-- **Database**: Aurora Serverless v2 PostgreSQL
-- **Cache**: ElastiCache Redis
+- **Database**: Aurora Serverless v2 PostgreSQL for all persistent data (including AI memory)
+- **Cache**: ElastiCache Redis for inventory locking
+- **Search & Analytics**: Elasticsearch/OpenSearch for full-text search and recommendation retrieval
+- **AI**: AWS Bedrock AgentCore (Claude 3) for conversational AI and trip planning
+- **AI Memory**: Aurora PostgreSQL with indexed queries and TTL cleanup via pg_cron, S3 for long-term snapshots
+- **External APIs**: Google Places API, Google Trends API for popularity signals
 - **Testing**: Go testing package, testify, gopter/rapid for property-based testing
