@@ -46,7 +46,9 @@ tour-booking-platform/
 │   │   │   ├── api-stack.ts            # API Gateway
 │   │   │   ├── messaging-stack.ts      # EventBridge, SQS, SNS
 │   │   │   ├── monitoring-stack.ts     # CloudWatch, X-Ray
-│   │   │   └── security-stack.ts       # WAF, KMS, Secrets Manager
+│   │   │   ├── security-stack.ts       # WAF, KMS, Secrets Manager
+│   │   │   ├── ai-stack.ts             # AWS Bedrock, DynamoDB for memory
+│   │   │   └── analytics-stack.ts      # Analytics database, reporting
 │   │   └── constructs/                 # Reusable CDK constructs
 │   │       ├── lambda-function.ts
 │   │       ├── api-endpoint.ts
@@ -63,6 +65,11 @@ tour-booking-platform/
 │   │   │   ├── excursion.ts
 │   │   │   ├── user.ts
 │   │   │   ├── payment.ts
+│   │   │   ├── itinerary.ts
+│   │   │   ├── restaurant.ts
+│   │   │   ├── shopping.ts
+│   │   │   ├── place.ts
+│   │   │   ├── recommendation.ts
 │   │   │   └── index.ts
 │   │   ├── utils/
 │   │   │   ├── timezone.ts
@@ -75,10 +82,21 @@ tour-booking-platform/
 │   │   │   ├── repositories/
 │   │   │   │   ├── booking-repository.ts
 │   │   │   │   ├── excursion-repository.ts
-│   │   │   │   └── user-repository.ts
+│   │   │   │   ├── user-repository.ts
+│   │   │   │   ├── itinerary-repository.ts
+│   │   │   │   ├── restaurant-repository.ts
+│   │   │   │   ├── shopping-repository.ts
+│   │   │   │   ├── place-repository.ts
+│   │   │   │   └── recommendation-repository.ts
 │   │   │   └── index.ts
 │   │   ├── cache/
 │   │   │   ├── redis-client.ts
+│   │   │   ├── inventory-cache.ts
+│   │   │   └── index.ts
+│   │   ├── external/
+│   │   │   ├── google-places-client.ts
+│   │   │   ├── google-trends-client.ts
+│   │   │   ├── bedrock-client.ts
 │   │   │   └── index.ts
 │   │   ├── middleware/
 │   │   │   ├── auth.ts
@@ -231,12 +249,100 @@ tour-booking-platform/
 │   │   ├── package.json
 │   │   └── README.md
 │   │
-│   ├── recommendations/       # Recommendation engine
+│   ├── recommendations/       # Enhanced recommendation engine
 │   │   ├── handlers/
 │   │   │   ├── get-recommendations.ts
+│   │   │   ├── calculate-recommendation-score.ts
 │   │   │   ├── get-cross-sell.ts
 │   │   │   ├── get-upsell.ts
-│   │   │   └── get-trending.ts
+│   │   │   ├── get-trending.ts
+│   │   │   ├── get-user-segment.ts
+│   │   │   └── update-user-behavior.ts
+│   │   ├── tests/
+│   │   ├── package.json
+│   │   └── README.md
+│   │
+│   ├── dining/                # Dining & restaurant service
+│   │   ├── handlers/
+│   │   │   ├── search-restaurants.ts
+│   │   │   ├── get-restaurant.ts
+│   │   │   ├── get-restaurants-by-destination.ts
+│   │   │   ├── get-near-port.ts
+│   │   │   ├── create-restaurant.ts
+│   │   │   ├── update-restaurant.ts
+│   │   │   └── generate-affiliate-link.ts
+│   │   ├── tests/
+│   │   ├── package.json
+│   │   └── README.md
+│   │
+│   ├── shopping/              # Shopping & local products service
+│   │   ├── handlers/
+│   │   │   ├── search-shopping-locations.ts
+│   │   │   ├── get-shopping-location.ts
+│   │   │   ├── get-local-products.ts
+│   │   │   ├── get-trending-products.ts
+│   │   │   ├── create-shopping-location.ts
+│   │   │   ├── update-shopping-location.ts
+│   │   │   └── generate-affiliate-link.ts
+│   │   ├── tests/
+│   │   ├── package.json
+│   │   └── README.md
+│   │
+│   ├── places/                # Google Places integration
+│   │   ├── handlers/
+│   │   │   ├── sync-google-places.ts
+│   │   │   ├── get-place-details.ts
+│   │   │   ├── search-places.ts
+│   │   │   ├── update-popularity-score.ts
+│   │   │   └── import-places-batch.ts
+│   │   ├── tests/
+│   │   ├── package.json
+│   │   └── README.md
+│   │
+│   ├── search-integration/    # Search integration service
+│   │   ├── handlers/
+│   │   │   ├── sync-google-trends.ts
+│   │   │   ├── get-trending-keywords.ts
+│   │   │   ├── aggregate-ratings.ts
+│   │   │   ├── get-popular-searches.ts
+│   │   │   └── analyze-seasonal-trends.ts
+│   │   ├── tests/
+│   │   ├── package.json
+│   │   └── README.md
+│   │
+│   ├── itinerary/             # Itinerary management service
+│   │   ├── handlers/
+│   │   │   ├── create-itinerary.ts
+│   │   │   ├── get-itinerary.ts
+│   │   │   ├── update-itinerary.ts
+│   │   │   ├── delete-itinerary.ts
+│   │   │   ├── list-user-itineraries.ts
+│   │   │   ├── add-item.ts
+│   │   │   ├── update-item.ts
+│   │   │   ├── delete-item.ts
+│   │   │   ├── detect-conflicts.ts
+│   │   │   ├── share-itinerary.ts
+│   │   │   ├── revoke-share.ts
+│   │   │   ├── update-share-permissions.ts
+│   │   │   └── import-booking.ts
+│   │   ├── tests/
+│   │   ├── package.json
+│   │   └── README.md
+│   │
+│   ├── ai-assistant/          # AI assistant service (AWS Bedrock)
+│   │   ├── handlers/
+│   │   │   ├── process-message.ts
+│   │   │   ├── get-recommendations-ai.ts
+│   │   │   ├── detect-conflicts-ai.ts
+│   │   │   ├── summarize-itinerary.ts
+│   │   │   ├── get-conversation-history.ts
+│   │   │   ├── manage-memory.ts
+│   │   │   └── mcp-integration.ts
+│   │   ├── prompts/
+│   │   │   ├── system-prompt.ts
+│   │   │   ├── recommendation-prompt.ts
+│   │   │   ├── conflict-detection-prompt.ts
+│   │   │   └── guardrails.ts
 │   │   ├── tests/
 │   │   ├── package.json
 │   │   └── README.md
@@ -261,11 +367,19 @@ tour-booking-platform/
 │   │   ├── 002_add_indexes.sql
 │   │   ├── 003_add_cruise_schedules.sql
 │   │   ├── 004_add_flight_schedules.sql
+│   │   ├── 005_add_itinerary_tables.sql
+│   │   ├── 006_add_dining_tables.sql
+│   │   ├── 007_add_shopping_tables.sql
+│   │   ├── 008_add_places_tables.sql
+│   │   ├── 009_add_recommendation_tables.sql
 │   │   └── ...
 │   ├── seeds/
 │   │   ├── destinations.sql
 │   │   ├── categories.sql
-│   │   └── sample_excursions.sql
+│   │   ├── sample_excursions.sql
+│   │   ├── sample_restaurants.sql
+│   │   ├── sample_shopping_locations.sql
+│   │   └── sample_places.sql
 │   ├── flyway.conf
 │   └── README.md
 │
@@ -285,15 +399,25 @@ tour-booking-platform/
 │   │   ├── cruise-integration.test.ts
 │   │   ├── payment-flow.test.ts
 │   │   ├── inventory-locking.test.ts
+│   │   ├── itinerary-management.test.ts
+│   │   ├── conflict-detection.test.ts
+│   │   ├── recommendation-engine.test.ts
+│   │   ├── dining-integration.test.ts
+│   │   ├── shopping-integration.test.ts
+│   │   ├── ai-assistant.test.ts
 │   │   └── event-driven-workflows.test.ts
 │   ├── e2e/
 │   │   ├── complete-booking.test.ts
-│   │   └── user-journey.test.ts
+│   │   ├── user-journey.test.ts
+│   │   ├── itinerary-creation.test.ts
+│   │   └── multi-revenue-stream.test.ts
 │   ├── property-based/
 │   │   ├── inventory-consistency.test.ts
 │   │   ├── no-overbooking.test.ts
 │   │   ├── time-window-validity.test.ts
-│   │   └── price-positivity.test.ts
+│   │   ├── price-positivity.test.ts
+│   │   ├── recommendation-score-bounds.test.ts
+│   │   └── conflict-detection-accuracy.test.ts
 │   ├── package.json
 │   └── README.md
 │
@@ -463,6 +587,8 @@ Each stack is responsible for a specific AWS service category:
 8. **messaging-stack.ts** - EventBridge, SQS queues, SNS topics
 9. **monitoring-stack.ts** - CloudWatch dashboards, alarms, X-Ray
 10. **security-stack.ts** - WAF, KMS keys, Secrets Manager
+11. **ai-stack.ts** - AWS Bedrock, DynamoDB for AI memory stores, SageMaker endpoints
+12. **analytics-stack.ts** - Separate analytics database, reporting infrastructure
 
 ### Example Stack: `api-stack.ts`
 
@@ -647,12 +773,14 @@ If you decide to scale to multiple repositories later:
 - **API**: API Gateway REST API
 - **Database**: Aurora Serverless v2 PostgreSQL
 - **Cache**: ElastiCache Redis
-- **Search**: OpenSearch
+- **Search**: OpenSearch / Elasticsearch
 - **Storage**: S3, CloudFront
 - **Auth**: Cognito
 - **Messaging**: EventBridge, SQS, SNS
 - **Monitoring**: CloudWatch, X-Ray
 - **Security**: WAF, KMS, Secrets Manager
+- **AI/ML**: AWS Bedrock (AgentCore), SageMaker, DynamoDB (AI memory)
+- **Analytics**: Separate analytics database for reporting
 
 ### Application
 - **Language**: TypeScript
@@ -662,10 +790,65 @@ If you decide to scale to multiple repositories later:
 - **Formatting**: Prettier
 - **Package Manager**: npm (workspaces)
 
+### External Integrations
+- **Google Places API** - Restaurant and shopping location data
+- **Google Trends API** - Trending search keywords and seasonal analysis
+- **Stripe/Adyen** - Payment processing
+- **Cruise Schedule Feeds** - Port call data
+- **Flight Schedule APIs** - Flight arrival data
+
+### New Services & Features
+- **Dining Service** - Restaurant recommendations with affiliate links
+- **Shopping Service** - Shopping locations and local products
+- **Places Service** - Google Places integration and synchronization
+- **Search Integration** - Google Trends and popularity scoring
+- **Itinerary Management** - Trip planning with conflict detection
+- **AI Assistant** - AWS Bedrock-powered conversational AI
+- **Enhanced Recommendations** - Multi-factor scoring (context, behavior, popularity, personalization)
+
+### Revenue Streams
+1. **Excursion Commissions** (15-25%)
+2. **Restaurant Affiliate Commissions** (5-15%)
+3. **Shopping Affiliate Commissions** (3-10%)
+
 ### CI/CD
 - **Pipeline**: GitHub Actions
 - **Deployment**: AWS CDK, AWS SAM (optional)
 - **Environments**: dev, staging, production
+
+---
+
+## Key Architecture Decisions
+
+### 1. Multi-Revenue Stream Architecture
+The platform now supports three revenue streams (excursions, dining, shopping) with a unified recommendation engine that personalizes suggestions across all categories.
+
+### 2. AI-Powered Features
+- **AWS Bedrock** for conversational AI and trip planning assistance
+- **DynamoDB** for short-term and long-term AI memory
+- **SageMaker** for ML-based recommendation models
+- **MCP Integration** for external tool access
+
+### 3. Enhanced Recommendation Engine
+Multi-factor scoring algorithm:
+- 30% Context-based (destination, time, budget)
+- 25% Behavioral (bookings, searches, clicks)
+- 25% Popularity (ratings, trends, velocity)
+- 20% Personalization (ML-based user segmentation)
+
+### 4. User Segmentation
+Five traveler segments:
+- Luxury Traveler
+- Family Traveler
+- Budget Traveler
+- Food-Focused Traveler
+- Adventure Traveler
+
+### 5. Itinerary Management
+- Multi-item type support (excursions, flights, hotels, cruises, leisure)
+- Automatic conflict detection
+- Sharing with view/edit permissions
+- Import functionality for external bookings
 
 ---
 

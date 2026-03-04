@@ -2,12 +2,16 @@
 
 ## Introduction
 
-The Tour Excursion Booking Platform is a comprehensive AWS-based system that enables travelers to discover, book, and manage shore excursions and tours. The platform supports destination-based selling with intelligent time-window filtering for cruise passengers and flight arrivals, dynamic pricing, real-time inventory management, and multi-channel authentication including social media login. The system integrates with cruise schedule feeds, flight APIs, and payment gateways to provide a seamless booking experience while ensuring operational safeguards like timezone-aware logic, booking cut-offs, and overbooking prevention.
+The Tour Excursion Booking Platform is a comprehensive AWS-based system that enables travelers to discover, book, and manage shore excursions, dining experiences, and shopping opportunities as part of a complete trip planning experience. The platform supports destination-based selling with intelligent time-window filtering for cruise passengers and flight arrivals, dynamic pricing, real-time inventory management, and multi-channel authentication including social media login. 
+
+The system features an AI-powered trip planning assistant using AWS Bedrock, itinerary management with automatic conflict detection, and an enhanced recommendation engine that personalizes suggestions across excursions, restaurants, and shopping locations. The platform integrates with cruise schedule feeds, flight APIs, Google Places API, Google Trends, and payment gateways to provide a seamless booking experience while ensuring operational safeguards like timezone-aware logic, booking cut-offs, and overbooking prevention.
+
+The platform generates revenue through three streams: excursion commissions (15-25%), restaurant affiliate commissions (5-15%), and shopping affiliate commissions (3-10%).
 
 ## Glossary
 
 - **System**: The Tour Excursion Booking Platform
-- **User**: A traveler who searches for and books excursions
+- **User**: A traveler who searches for and books excursions, restaurants, and shopping
 - **Supplier**: A tour operator who provides excursions
 - **Admin**: Platform administrator managing operations
 - **Excursion**: A tour or activity offered at a destination
@@ -26,6 +30,21 @@ The Tour Excursion Booking Platform is a comprehensive AWS-based system that ena
 - **Inventory_Service**: Component managing real-time inventory and locks
 - **Pricing_Engine**: Component calculating dynamic prices
 - **Payment_Service**: Component processing payments and refunds
+- **Itinerary**: A trip plan containing multiple items (excursions, flights, hotels, etc.)
+- **Itinerary_Item**: A single entry in an itinerary with start/end times and metadata
+- **Conflict**: A scheduling issue detected in an itinerary (time overlap, insufficient buffer, etc.)
+- **Restaurant**: A dining establishment with ratings, price level, and affiliate links
+- **Shopping_Location**: A mall, market, boutique, or duty-free shop
+- **Place**: A location from Google Places API (restaurant, shopping, attraction)
+- **Local_Product**: A trending product available at a destination
+- **User_Segment**: A classification of user preferences (luxury, family, budget, food-focused, adventure)
+- **Recommendation_Score**: A calculated score for ranking recommendations (0-100)
+- **AI_Assistant**: AWS Bedrock-powered conversational AI for trip planning
+- **Short_Term_Memory**: AI conversation context for the current session
+- **Long_Term_Memory**: AI user preferences stored across sessions
+- **Affiliate_Link**: A tracked URL that generates commission on completed transactions
+- **Trending_Score**: A popularity metric based on Google Trends data
+- **Popularity_Score**: A calculated metric combining ratings, reviews, and trends
 
 ## Requirements
 
@@ -525,6 +544,223 @@ The Tour Excursion Booking Platform is a comprehensive AWS-based system that ena
 9. WHEN audit logs are stored, THE System SHALL retain them for at least 7 years for compliance
 10. WHEN audit logs are queried, THE System SHALL provide search and filtering capabilities by user, action, timestamp, and resource
 
+
+### Requirement 31: Itinerary Management
+
+**User Story:** As a traveler, I want to create and manage trip itineraries with multiple items, so that I can plan my complete trip in one place.
+
+#### Acceptance Criteria
+
+1. WHEN a user creates an itinerary, THE System SHALL store title, description, and public visibility flag
+2. WHEN a user adds an item to an itinerary, THE System SHALL support types: excursion, flight, hotel, cruise, leisure, and other
+3. WHEN a user adds an item, THE System SHALL require start time and end time
+4. WHEN a user adds an item, THE System SHALL allow optional metadata including title, description, supplier info, and booking reference
+5. WHEN a user imports an external booking, THE System SHALL parse booking details and create an itinerary item
+6. WHEN a user views an itinerary, THE System SHALL display all items sorted chronologically
+7. WHEN a user updates an item, THE System SHALL validate that end time is after start time
+8. WHEN a user deletes an item, THE System SHALL remove it from the itinerary
+9. WHEN a user lists their itineraries, THE System SHALL display both owned and shared itineraries
+10. WHEN a user deletes an itinerary, THE System SHALL soft delete and remove all shares
+
+
+### Requirement 32: Itinerary Sharing and Collaboration
+
+**User Story:** As a traveler, I want to share my itinerary with friends and family, so that we can plan trips together.
+
+#### Acceptance Criteria
+
+1. WHEN a user shares an itinerary, THE System SHALL require the recipient's user ID or email
+2. WHEN a user shares an itinerary, THE System SHALL allow setting view-only or edit permissions
+3. WHEN an itinerary is shared, THE System SHALL send a notification email to the recipient
+4. WHEN a shared user views an itinerary, THE System SHALL display all items if they have view permission
+5. WHEN a shared user attempts to edit an itinerary, THE System SHALL allow edits only if they have edit permission
+6. WHEN a shared user attempts to delete an itinerary, THE System SHALL reject the request (only owner can delete)
+7. WHEN an owner revokes a share, THE System SHALL remove the recipient's access immediately
+8. WHEN an owner updates share permissions, THE System SHALL apply the new permissions immediately
+9. WHEN a user views shared itineraries, THE System SHALL display the owner's name
+10. WHEN an owner deletes an itinerary, THE System SHALL remove access for all shared users
+
+
+### Requirement 33: Conflict Detection
+
+**User Story:** As a traveler, I want automatic conflict detection in my itinerary, so that I can avoid scheduling issues.
+
+#### Acceptance Criteria
+
+1. WHEN a user adds an item to an itinerary, THE System SHALL check for time overlaps with existing items
+2. WHEN a time overlap is detected, THE System SHALL create a conflict record with type time_overlap and severity error
+3. WHEN a user adds an excursion after a flight, THE System SHALL verify sufficient buffer time (2 hours)
+4. WHEN insufficient buffer is detected, THE System SHALL create a conflict record with type insufficient_buffer and severity warning
+5. WHEN a user adds an excursion before a cruise departure, THE System SHALL verify the excursion ends before departure minus 1.5 hours
+6. WHEN a user views an itinerary, THE System SHALL display all conflicts with descriptions and suggestions
+7. WHEN a conflict is resolved by editing items, THE System SHALL automatically remove the conflict record
+8. WHEN a supplier has a warning flag, THE System SHALL create a conflict record with type supplier_warning and severity info
+9. WHEN an excursion is at capacity, THE System SHALL create a conflict record with type capacity_issue and severity warning
+10. WHEN conflicts are detected, THE System SHALL provide actionable suggestions for resolution
+
+
+### Requirement 34: Dining Recommendations
+
+**User Story:** As a traveler, I want restaurant recommendations at my destination, so that I can find great places to eat.
+
+#### Acceptance Criteria
+
+1. WHEN a user views a destination, THE System SHALL display recommended restaurants with ratings, price levels, and cuisine types
+2. WHEN a user searches for restaurants, THE System SHALL filter by cuisine type, price level, and proximity to port
+3. WHEN a user views a restaurant, THE System SHALL display name, address, phone, website, opening hours, and Google rating
+4. WHEN a user views restaurants near port, THE System SHALL display only restaurants within 2km of the port
+5. WHEN a user views fine dining recommendations, THE System SHALL display only restaurants with price level 3 or 4
+6. WHEN a user views quick bites, THE System SHALL display restaurants with price level 1 or 2 near the port
+7. WHEN a user clicks a restaurant reservation link, THE System SHALL generate an affiliate link and track the click
+8. WHEN a reservation is completed through an affiliate link, THE System SHALL record the commission (5-15%)
+9. WHEN displaying restaurants, THE System SHALL show specialties, dress code, and reservation availability
+10. WHEN a restaurant is upscale, THE System SHALL prominently display the upscale flag
+
+
+### Requirement 35: Shopping Recommendations
+
+**User Story:** As a traveler, I want shopping location recommendations, so that I can find local products and souvenirs.
+
+#### Acceptance Criteria
+
+1. WHEN a user views a destination, THE System SHALL display shopping locations including malls, markets, boutiques, and duty-free shops
+2. WHEN a user searches for shopping, THE System SHALL filter by type (mall, market, boutique, duty-free, artisan)
+3. WHEN a user views a shopping location, THE System SHALL display name, address, specialty items, brands, and operating hours
+4. WHEN a user views local products, THE System SHALL display trending products with average prices and where to find them
+5. WHEN a user views duty-free shops, THE System SHALL prominently display the duty-free flag
+6. WHEN a user clicks a shopping affiliate link, THE System SHALL generate an affiliate link and track the click
+7. WHEN a purchase is completed through an affiliate link, THE System SHALL record the commission (3-10%)
+8. WHEN displaying shopping locations, THE System SHALL show whether they accept credit cards
+9. WHEN displaying local products, THE System SHALL show popularity index and seasonality
+10. WHEN a product is trending, THE System SHALL display it in the trending local items section
+
+
+### Requirement 36: Google Places Integration
+
+**User Story:** As a platform operator, I want to integrate with Google Places API, so that restaurant and shopping data is accurate and up-to-date.
+
+#### Acceptance Criteria
+
+1. WHEN syncing Google Places data, THE System SHALL query the Google Places API for restaurants and shopping locations
+2. WHEN a place is retrieved from Google Places, THE System SHALL store the Google Place ID, name, rating, review count, price level, and coordinates
+3. WHEN a place is synced, THE System SHALL calculate a popularity score based on rating, review count, and trending data
+4. WHEN a place already exists, THE System SHALL update the existing record rather than create a duplicate
+5. WHEN syncing places, THE System SHALL batch process to avoid API rate limits
+6. WHEN Google Places data is unavailable, THE System SHALL use cached data from the last successful sync
+7. WHEN a place is synced, THE System SHALL store photos, opening hours, and phone number
+8. WHEN displaying places, THE System SHALL show the Google rating and review count
+9. WHEN a place is deleted from Google Places, THE System SHALL mark it as inactive
+10. WHEN syncing places, THE System SHALL run daily for all active destinations
+
+
+### Requirement 37: Enhanced Recommendation Engine
+
+**User Story:** As a traveler, I want personalized recommendations across excursions, dining, and shopping, so that I discover the best options for my preferences.
+
+#### Acceptance Criteria
+
+1. WHEN calculating recommendation scores, THE System SHALL use 30% weight for context-based factors (destination, time, budget)
+2. WHEN calculating recommendation scores, THE System SHALL use 25% weight for behavioral factors (bookings, searches, clicks)
+3. WHEN calculating recommendation scores, THE System SHALL use 25% weight for popularity factors (ratings, trends, velocity)
+4. WHEN calculating recommendation scores, THE System SHALL use 20% weight for personalization factors (user segment, ML model)
+5. WHEN a user is segmented as luxury, THE System SHALL boost recommendations for price level 3-4 items
+6. WHEN a user is segmented as family, THE System SHALL boost recommendations for family-friendly items
+7. WHEN a user is segmented as budget, THE System SHALL boost recommendations for price level 1-2 items
+8. WHEN a user is segmented as food-focused, THE System SHALL boost restaurant recommendations
+9. WHEN a user is segmented as adventure, THE System SHALL boost recommendations for moderate and challenging excursions
+10. WHEN displaying recommendations, THE System SHALL rank items by total score and show top 10
+
+
+### Requirement 38: User Segmentation
+
+**User Story:** As a platform operator, I want to segment users by travel preferences, so that recommendations are personalized.
+
+#### Acceptance Criteria
+
+1. WHEN a user completes bookings, THE System SHALL analyze booking patterns to determine user segment
+2. WHEN a user's average booking price is above $200, THE System SHALL classify them as luxury traveler
+3. WHEN a user's travel party size is 3 or more, THE System SHALL classify them as family traveler
+4. WHEN a user's average booking price is below $75, THE System SHALL classify them as budget traveler
+5. WHEN a user's restaurant clicks exceed excursion clicks, THE System SHALL classify them as food-focused traveler
+6. WHEN a user's preferred categories include adventure or extreme, THE System SHALL classify them as adventure traveler
+7. WHEN calculating user segment, THE System SHALL use ML model confidence score between 0 and 1
+8. WHEN a user's behavior changes, THE System SHALL update their segment classification
+9. WHEN displaying segment, THE System SHALL show the segment name and confidence score
+10. WHEN a user has insufficient data, THE System SHALL use default segment (general traveler)
+
+
+### Requirement 39: Search Integration and Trending
+
+**User Story:** As a platform operator, I want to integrate with Google Trends, so that trending items are surfaced to users.
+
+#### Acceptance Criteria
+
+1. WHEN syncing Google Trends data, THE System SHALL query trending search keywords for each destination
+2. WHEN a keyword is trending, THE System SHALL calculate a trending score based on search volume and velocity
+3. WHEN displaying excursions, THE System SHALL boost items matching trending keywords
+4. WHEN displaying restaurants, THE System SHALL boost items matching trending keywords
+5. WHEN displaying shopping locations, THE System SHALL boost items matching trending keywords
+6. WHEN a product is trending, THE System SHALL display it in the trending local items section
+7. WHEN syncing trends, THE System SHALL run daily for all active destinations
+8. WHEN trends data is unavailable, THE System SHALL use cached data from the last successful sync
+9. WHEN calculating popularity scores, THE System SHALL include trending score as a factor
+10. WHEN displaying trending items, THE System SHALL show the trending indicator
+
+
+### Requirement 40: AI-Powered Trip Planning Assistant
+
+**User Story:** As a traveler, I want an AI assistant to help plan my trip, so that I can get personalized recommendations and answers to my questions.
+
+#### Acceptance Criteria
+
+1. WHEN a user sends a message to the AI assistant, THE System SHALL use AWS Bedrock to generate a response
+2. WHEN generating a response, THE System SHALL include context from the user's itinerary, bookings, and preferences
+3. WHEN a user asks for recommendations, THE System SHALL use the recommendation engine to suggest excursions, restaurants, and shopping
+4. WHEN a user asks about conflicts, THE System SHALL analyze the itinerary and identify scheduling issues
+5. WHEN a user asks for a summary, THE System SHALL generate a natural language summary of the itinerary
+6. WHEN processing messages, THE System SHALL maintain conversation history in DynamoDB
+7. WHEN processing messages, THE System SHALL use short-term memory for the current session
+8. WHEN processing messages, THE System SHALL use long-term memory for user preferences across sessions
+9. WHEN generating responses, THE System SHALL apply guardrails to prevent inappropriate content
+10. WHEN a user requests an action (book, add to itinerary), THE System SHALL provide actionable suggestions with links
+
+
+### Requirement 41: AI Memory Management
+
+**User Story:** As a platform operator, I want the AI assistant to remember user preferences and context, so that conversations are personalized and coherent.
+
+#### Acceptance Criteria
+
+1. WHEN a conversation starts, THE System SHALL load short-term memory from DynamoDB for the session
+2. WHEN a conversation ends, THE System SHALL save short-term memory to DynamoDB
+3. WHEN a user preference is identified, THE System SHALL store it in long-term memory
+4. WHEN generating responses, THE System SHALL include relevant long-term memory context
+5. WHEN a user mentions a destination, THE System SHALL store it as a preference
+6. WHEN a user mentions a cuisine type, THE System SHALL store it as a preference
+7. WHEN a user mentions a budget, THE System SHALL store it as a preference
+8. WHEN memory storage exceeds limits, THE System SHALL summarize and compress old memories
+9. WHEN a user requests to clear memory, THE System SHALL delete all stored memories
+10. WHEN accessing memory, THE System SHALL use semantic search to find relevant context
+
+
+### Requirement 42: Cross-Selling and Upselling
+
+**User Story:** As a platform operator, I want to cross-sell and upsell across excursions, dining, and shopping, so that revenue is maximized.
+
+#### Acceptance Criteria
+
+1. WHEN a user books a snorkeling excursion, THE System SHALL recommend beachfront restaurants
+2. WHEN a user books an excursion, THE System SHALL recommend shopping locations near the meeting point
+3. WHEN a user views a restaurant, THE System SHALL recommend nearby shopping locations
+4. WHEN a user views a shopping location, THE System SHALL recommend nearby restaurants
+5. WHEN a user completes a booking, THE System SHALL display upsell recommendations for premium alternatives
+6. WHEN displaying cross-sell recommendations, THE System SHALL show relevance score
+7. WHEN a user clicks a cross-sell recommendation, THE System SHALL track the click for analytics
+8. WHEN a cross-sell results in a booking or affiliate click, THE System SHALL attribute the revenue
+9. WHEN displaying upsell recommendations, THE System SHALL show price difference and benefits
+10. WHEN a user dismisses a recommendation, THE System SHALL not show it again in the same session
+
+
 ## Non-Functional Requirements
 
 ### NFR-1: Performance
@@ -772,5 +1008,9 @@ The Tour Excursion Booking Platform is a comprehensive AWS-based system that ena
 
 ## Summary
 
-This requirements document defines 30 functional requirements and 10 non-functional requirements for the Tour Excursion Booking Platform. The system enables travelers to discover and book excursions with intelligent time-window filtering for cruise and flight schedules, real-time inventory management, dynamic pricing, and secure payment processing. The platform supports multi-channel authentication, event-driven workflows, comprehensive monitoring, and compliance with GDPR and PCI DSS. All requirements are derived from the approved design document and follow EARS patterns for clarity and testability.
+This requirements document defines 42 functional requirements and 10 non-functional requirements for the Tour Excursion Booking Platform. The system enables travelers to discover and book excursions, restaurants, and shopping experiences with intelligent time-window filtering for cruise and flight schedules, real-time inventory management, dynamic pricing, and secure payment processing. 
+
+The platform features an AI-powered trip planning assistant using AWS Bedrock, comprehensive itinerary management with automatic conflict detection, and an enhanced multi-factor recommendation engine that personalizes suggestions across all categories. The system supports multi-channel authentication, event-driven workflows, comprehensive monitoring, and compliance with GDPR and PCI DSS.
+
+The platform generates revenue through three streams: excursion commissions (15-25%), restaurant affiliate commissions (5-15%), and shopping affiliate commissions (3-10%). All requirements are derived from the approved design document and follow EARS patterns for clarity and testability.
 
