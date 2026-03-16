@@ -41,8 +41,8 @@ This implementation plan breaks down the AWS-based tour excursion booking platfo
   - _Requirements: 1.1, 1.6, 2.1, 2.2, 3.1, 4.1, 5.1, 7.1, 8.1, 14.1_
 
 
-- [ ] 3. Implement Authentication Service with Cognito integration
-  - [ ] 3.1 Configure Amazon Cognito User Pool with email and phone attributes
+- [x] 3. Implement Authentication Service with Cognito integration
+  - [x] 3.1 Configure Amazon Cognito User Pool with email and phone attributes
     - Set up user pool with password policy (8+ chars, complexity requirements)
     - Configure email verification workflow
     - Enable passwordless authentication with custom auth flow
@@ -52,7 +52,7 @@ This implementation plan breaks down the AWS-based tour excursion booking platfo
     - Store OAuth client secrets in Secrets Manager
     - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 1.10_
   
-  - [ ] 3.2 Implement Authentication Lambda functions in Go
+  - [x] 3.2 Implement Authentication Lambda functions in Go
     - Create signup Lambda with email/password registration (Go)
     - Create login Lambda with credential validation (Go)
     - Create social login Lambda with OAuth 2.0 flow (Go)
@@ -65,7 +65,7 @@ This implementation plan breaks down the AWS-based tour excursion booking platfo
     - Create user profile in RDS on successful authentication
     - _Requirements: 1.1, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9_
   
-  - [ ] 3.3 Implement passwordless authentication flow
+  - [x] 3.3 Implement passwordless authentication flow
     - Generate secure one-time tokens (6-digit code or magic link)
     - Store tokens in Aurora PostgreSQL with 10-minute expiration
     - Send magic link via Amazon SES

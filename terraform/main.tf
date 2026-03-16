@@ -121,3 +121,24 @@ module "auth_lambdas" {
   from_email                = var.from_email
   app_url                   = var.app_url
 }
+
+# API Gateway
+module "api_gateway" {
+  source = "./modules/api-gateway"
+
+  environment = var.environment
+  aws_region  = var.aws_region
+
+  user_pool_arn = module.auth.user_pool_arn
+
+  signup_lambda_invoke_arn              = module.auth_lambdas.signup_lambda_invoke_arn
+  signup_lambda_arn                     = module.auth_lambdas.signup_lambda_arn
+  login_lambda_invoke_arn               = module.auth_lambdas.login_lambda_invoke_arn
+  login_lambda_arn                      = module.auth_lambdas.login_lambda_arn
+  passwordless_request_lambda_invoke_arn = module.auth_lambdas.passwordless_request_lambda_invoke_arn
+  passwordless_request_lambda_arn        = module.auth_lambdas.passwordless_request_lambda_arn
+  passwordless_verify_lambda_invoke_arn  = module.auth_lambdas.passwordless_verify_lambda_invoke_arn
+  passwordless_verify_lambda_arn         = module.auth_lambdas.passwordless_verify_lambda_arn
+  token_refresh_lambda_invoke_arn        = module.auth_lambdas.token_refresh_lambda_invoke_arn
+  token_refresh_lambda_arn               = module.auth_lambdas.token_refresh_lambda_arn
+}
