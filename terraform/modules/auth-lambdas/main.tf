@@ -28,6 +28,12 @@ resource "aws_iam_role_policy_attachment" "lambda_vpc" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+# Attach X-Ray tracing policy
+resource "aws_iam_role_policy_attachment" "lambda_xray" {
+  role       = aws_iam_role.auth_lambda_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
 # Custom policy for Cognito, SES, Secrets Manager, and RDS
 resource "aws_iam_role_policy" "auth_lambda_policy" {
   name = "explorer-agent-auth-lambda-policy"
@@ -56,10 +62,10 @@ resource "aws_iam_role_policy" "auth_lambda_policy" {
         Action = [
           "secretsmanager:GetSecretValue"
         ]
-        Resource = [
+        Resource = compact([
           var.database_secret_arn,
           var.oauth_secret_arn
-        ]
+        ])
       },
       {
         Effect = "Allow"
