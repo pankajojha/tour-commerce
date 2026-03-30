@@ -1,26 +1,22 @@
-.PHONY: build clean deploy test deps
+.PHONY: build clean test deps
 
-FUNCTIONS := signup login passwordless-request passwordless-verify token-refresh
 DIST_DIR := dist
 
 build:
-	@echo "Building Lambda functions..."
+	@echo "Building auth handler Lambda..."
 	@mkdir -p $(DIST_DIR)
-	@for func in $(FUNCTIONS); do \
-		echo "Building $$func..."; \
-		cd $$func && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap main.go && \
-		zip -j ../$(DIST_DIR)/$$func.zip bootstrap && \
-		rm bootstrap && \
-		cd ..; \
-	done
+	@cd handler && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap main.go && \
+		zip -j ../$(DIST_DIR)/handler.zip bootstrap && \
+		rm bootstrap
+	@echo "Building pre-signup trigger Lambda..."
+	@cd pre-signup && GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap main.go && \
+		zip -j ../$(DIST_DIR)/pre-signup.zip bootstrap && \
+		rm bootstrap
 	@echo "Build complete! Artifacts in $(DIST_DIR)/"
 
 clean:
 	@echo "Cleaning build artifacts..."
 	@rm -rf $(DIST_DIR)
-	@for func in $(FUNCTIONS); do \
-		rm -f $$func/bootstrap; \
-	done
 	@echo "Clean complete!"
 
 test:

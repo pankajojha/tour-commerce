@@ -142,7 +142,7 @@ resource "aws_api_gateway_integration" "signup" {
   http_method             = aws_api_gateway_method.signup_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.signup_lambda_invoke_arn
+  uri                     = var.auth_handler_lambda_invoke_arn
 }
 
 # =============================================================================
@@ -169,7 +169,7 @@ resource "aws_api_gateway_integration" "login" {
   http_method             = aws_api_gateway_method.login_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.login_lambda_invoke_arn
+  uri                     = var.auth_handler_lambda_invoke_arn
 }
 
 # =============================================================================
@@ -206,7 +206,7 @@ resource "aws_api_gateway_integration" "passwordless_request" {
   http_method             = aws_api_gateway_method.passwordless_request_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.passwordless_request_lambda_invoke_arn
+  uri                     = var.auth_handler_lambda_invoke_arn
 }
 
 # =============================================================================
@@ -233,7 +233,7 @@ resource "aws_api_gateway_integration" "passwordless_verify" {
   http_method             = aws_api_gateway_method.passwordless_verify_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.passwordless_verify_lambda_invoke_arn
+  uri                     = var.auth_handler_lambda_invoke_arn
 }
 
 # =============================================================================
@@ -260,7 +260,7 @@ resource "aws_api_gateway_integration" "refresh" {
   http_method             = aws_api_gateway_method.refresh_post.http_method
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = var.token_refresh_lambda_invoke_arn
+  uri                     = var.auth_handler_lambda_invoke_arn
 }
 
 # =============================================================================
@@ -333,42 +333,11 @@ resource "aws_api_gateway_integration_response" "cors" {
 # Lambda Permissions (allow API Gateway to invoke Lambdas)
 # =============================================================================
 
-resource "aws_lambda_permission" "signup" {
+# Lambda Permission (single handler for all auth routes)
+resource "aws_lambda_permission" "auth_handler" {
   statement_id  = "AllowAPIGatewayInvoke"
   action        = "lambda:InvokeFunction"
-  function_name = var.signup_lambda_arn
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
-}
-
-resource "aws_lambda_permission" "login" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = var.login_lambda_arn
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
-}
-
-resource "aws_lambda_permission" "passwordless_request" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = var.passwordless_request_lambda_arn
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
-}
-
-resource "aws_lambda_permission" "passwordless_verify" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = var.passwordless_verify_lambda_arn
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
-}
-
-resource "aws_lambda_permission" "token_refresh" {
-  statement_id  = "AllowAPIGatewayInvoke"
-  action        = "lambda:InvokeFunction"
-  function_name = var.token_refresh_lambda_arn
+  function_name = var.auth_handler_lambda_arn
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_rest_api.main.execution_arn}/*/*"
 }
