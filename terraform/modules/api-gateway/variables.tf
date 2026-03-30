@@ -13,54 +13,13 @@ variable "user_pool_arn" {
   type        = string
 }
 
-# Lambda invoke ARNs
-variable "signup_lambda_invoke_arn" {
-  description = "Signup Lambda invoke ARN"
+variable "auth_handler_lambda_invoke_arn" {
+  description = "Auth handler Lambda invoke ARN (single Lambda for all /auth/* routes)"
   type        = string
 }
 
-variable "signup_lambda_arn" {
-  description = "Signup Lambda ARN"
-  type        = string
-}
-
-variable "login_lambda_invoke_arn" {
-  description = "Login Lambda invoke ARN"
-  type        = string
-}
-
-variable "login_lambda_arn" {
-  description = "Login Lambda ARN"
-  type        = string
-}
-
-variable "passwordless_request_lambda_invoke_arn" {
-  description = "Passwordless request Lambda invoke ARN"
-  type        = string
-}
-
-variable "passwordless_request_lambda_arn" {
-  description = "Passwordless request Lambda ARN"
-  type        = string
-}
-
-variable "passwordless_verify_lambda_invoke_arn" {
-  description = "Passwordless verify Lambda invoke ARN"
-  type        = string
-}
-
-variable "passwordless_verify_lambda_arn" {
-  description = "Passwordless verify Lambda ARN"
-  type        = string
-}
-
-variable "token_refresh_lambda_invoke_arn" {
-  description = "Token refresh Lambda invoke ARN"
-  type        = string
-}
-
-variable "token_refresh_lambda_arn" {
-  description = "Token refresh Lambda ARN"
+variable "auth_handler_lambda_arn" {
+  description = "Auth handler Lambda ARN"
   type        = string
 }
 

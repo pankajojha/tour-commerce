@@ -32,3 +32,8 @@ output "oauth_credentials_secret_arn" {
   description = "OAuth credentials secret ARN"
   value       = var.enable_social_login ? aws_secretsmanager_secret.oauth_credentials[0].arn : ""
 }
+
+output "pre_signup_lambda_arn" {
+  description = "Pre-signup trigger Lambda ARN (User Pool First account linking)"
+  value       = aws_lambda_function.pre_signup.arn
+}

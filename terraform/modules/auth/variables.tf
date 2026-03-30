@@ -117,12 +117,6 @@ variable "verify_auth_challenge_lambda_arn" {
   default     = ""
 }
 
-variable "pre_signup_lambda_arn" {
-  description = "ARN of Lambda function for pre-signup trigger"
-  type        = string
-  default     = ""
-}
-
 variable "post_confirmation_lambda_arn" {
   description = "ARN of Lambda function for post-confirmation trigger"
   type        = string

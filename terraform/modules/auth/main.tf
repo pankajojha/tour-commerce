@@ -1,4 +1,56 @@
+# =============================================================================
+# Pre-Signup Trigger Lambda — "User Pool First" account linking
+# =============================================================================
+# Created inside the auth module because the User Pool lambda_config needs
+# the ARN at creation time.  The Lambda itself only needs the Cognito SDK
+# (provided by the Go binary) and receives the User Pool ID in the event.
+
+resource "aws_iam_role" "pre_signup_role" {
+  name = "explorer-agent-pre-signup-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "lambda.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "pre_signup_basic" {
+  role       = aws_iam_role.pre_signup_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "pre_signup_xray" {
+  role       = aws_iam_role.pre_signup_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AWSXRayDaemonWriteAccess"
+}
+
+resource "aws_lambda_function" "pre_signup" {
+  filename         = "${path.root}/../services/auth/dist/pre-signup.zip"
+  function_name    = "explorer-agent-auth-pre-signup"
+  role             = aws_iam_role.pre_signup_role.arn
+  handler          = "bootstrap"
+  source_code_hash = filebase64sha256("${path.root}/../services/auth/dist/pre-signup.zip")
+  runtime          = "provided.al2"
+  timeout          = 10
+  memory_size      = 128
+
+  tracing_config {
+    mode = "Active"
+  }
+}
+
+resource "aws_cloudwatch_log_group" "pre_signup" {
+  name              = "/aws/lambda/${aws_lambda_function.pre_signup.function_name}"
+  retention_in_days = 30
+}
+
+# =============================================================================
 # Cognito User Pool
+# =============================================================================
 resource "aws_cognito_user_pool" "main" {
   name = "explorer-agent-user-pool"
 
@@ -66,12 +118,12 @@ resource "aws_cognito_user_pool" "main" {
     }
   }
 
-  # Custom auth flow for passwordless
+  # Custom auth flow for passwordless + "User Pool First" pre-signup trigger
   lambda_config {
     define_auth_challenge          = var.define_auth_challenge_lambda_arn
     create_auth_challenge          = var.create_auth_challenge_lambda_arn
     verify_auth_challenge_response = var.verify_auth_challenge_lambda_arn
-    pre_sign_up                    = var.pre_signup_lambda_arn
+    pre_sign_up                    = aws_lambda_function.pre_signup.arn
     post_confirmation              = var.post_confirmation_lambda_arn
     pre_token_generation           = var.pre_token_generation_lambda_arn
   }
@@ -103,6 +155,33 @@ resource "aws_cognito_user_pool" "main" {
 resource "aws_cognito_user_pool_domain" "main" {
   domain       = "explorer-agent-${var.environment}"
   user_pool_id = aws_cognito_user_pool.main.id
+}
+
+# Grant pre-signup Lambda permission to call Cognito admin APIs on this pool
+resource "aws_iam_role_policy" "pre_signup_cognito" {
+  name = "explorer-agent-pre-signup-cognito"
+  role = aws_iam_role.pre_signup_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Action = [
+        "cognito-idp:ListUsers",
+        "cognito-idp:AdminLinkProviderForUser"
+      ]
+      Resource = aws_cognito_user_pool.main.arn
+    }]
+  })
+}
+
+# Allow Cognito to invoke the pre-signup trigger
+resource "aws_lambda_permission" "pre_signup_cognito" {
+  statement_id  = "AllowCognitoInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.pre_signup.function_name
+  principal     = "cognito-idp.amazonaws.com"
+  source_arn    = aws_cognito_user_pool.main.arn
 }
 
 # Cognito User Pool Client - Web
