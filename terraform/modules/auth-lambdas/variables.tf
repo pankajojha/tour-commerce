@@ -59,3 +59,23 @@ variable "app_url" {
   type        = string
   default     = "https://app.exploreragent.com"
 }
+
+variable "cognito_domain" {
+  description = "Cognito hosted UI domain URL"
+  type        = string
+}
+
+variable "oauth_callback_url" {
+  description = "Backend OAuth callback URL registered in Cognito"
+  type        = string
+}
+
+variable "frontend_auth_callback_url" {
+  description = "Frontend URL for successful OAuth return"
+  type        = string
+}
+
+variable "frontend_auth_cancel_url" {
+  description = "Frontend URL for cancelled/failed OAuth return"
+  type        = string
+}

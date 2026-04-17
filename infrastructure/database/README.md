@@ -174,6 +174,25 @@ properties: {
 5. **Use Transactions**: Wrap complex migrations in BEGIN/COMMIT
 6. **Add Comments**: Document why changes are being made
 
+## Local Docker Development
+
+For local Linux development, a Docker-based PostgreSQL setup is available in `local/postgres/`.
+
+From the `tour-agent/` root:
+
+```bash
+docker compose -f local/postgres/docker-compose.yml up --build -d
+```
+
+This local image:
+
+- uses PostgreSQL 15
+- enables `pg_cron` so the current migration set can run
+- replays SQL migrations from `infrastructure/database/migrations/` on first boot
+- adds the `passwordless_tokens` table needed by the auth services
+
+See `local/postgres/README.md` for connection settings and reset instructions.
+
 ## Security
 
 - Database credentials stored in AWS Secrets Manager

@@ -10,3 +10,9 @@ availability_zones = ["us-east-1a", "us-east-1b", "us-east-1c"]
 database_name = "touragent"
 aurora_min_capacity = 0.5
 aurora_max_capacity = 128
+
+# OAuth redirect flow URLs
+# oauth_callback_url must be included in Cognito web_callback_urls
+oauth_callback_url = "http://localhost:8080/auth/oauth/callback"
+frontend_auth_callback_url = "http://localhost:5173/auth/callback"
+frontend_auth_cancel_url = "http://localhost:5173/auth/cancel"

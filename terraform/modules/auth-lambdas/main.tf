@@ -118,7 +118,75 @@ resource "aws_lambda_function" "pre_signup" {
   }
 }
 
+# OAuth Start Lambda
+resource "aws_lambda_function" "oauth_start" {
+  filename         = "${path.root}/../services/auth/dist/oauth-start.zip"
+  function_name    = "explorer-agent-auth-oauth-start"
+  role             = aws_iam_role.auth_lambda_role.arn
+  handler          = "bootstrap"
+  source_code_hash = filebase64sha256("${path.root}/../services/auth/dist/oauth-start.zip")
+  runtime          = "provided.al2"
+  timeout          = 30
+  memory_size      = 256
+
+  environment {
+    variables = {
+      CLIENT_ID          = var.web_client_id
+      COGNITO_DOMAIN     = var.cognito_domain
+      OAUTH_CALLBACK_URL = var.oauth_callback_url
+      OAUTH_SCOPE        = "openid email profile"
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+}
+
+# OAuth Callback Lambda
+resource "aws_lambda_function" "oauth_callback" {
+  filename         = "${path.root}/../services/auth/dist/oauth-callback.zip"
+  function_name    = "explorer-agent-auth-oauth-callback"
+  role             = aws_iam_role.auth_lambda_role.arn
+  handler          = "bootstrap"
+  source_code_hash = filebase64sha256("${path.root}/../services/auth/dist/oauth-callback.zip")
+  runtime          = "provided.al2"
+  timeout          = 30
+  memory_size      = 256
+
+  environment {
+    variables = {
+      FRONTEND_AUTH_CALLBACK_URL = var.frontend_auth_callback_url
+      FRONTEND_AUTH_CANCEL_URL   = var.frontend_auth_cancel_url
+    }
+  }
+
+  vpc_config {
+    subnet_ids         = var.private_subnet_ids
+    security_group_ids = [var.lambda_security_group_id]
+  }
+
+  tracing_config {
+    mode = "Active"
+  }
+}
+
 resource "aws_cloudwatch_log_group" "pre_signup" {
   name              = "/aws/lambda/${aws_lambda_function.pre_signup.function_name}"
+  retention_in_days = 30
+}
+
+resource "aws_cloudwatch_log_group" "oauth_start" {
+  name              = "/aws/lambda/${aws_lambda_function.oauth_start.function_name}"
+  retention_in_days = 30
+}
+
+resource "aws_cloudwatch_log_group" "oauth_callback" {
+  name              = "/aws/lambda/${aws_lambda_function.oauth_callback.function_name}"
   retention_in_days = 30
 }

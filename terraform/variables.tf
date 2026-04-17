@@ -83,6 +83,24 @@ variable "app_url" {
   default     = "http://localhost:3000"
 }
 
+variable "oauth_callback_url" {
+  description = "Backend OAuth callback URL registered in Cognito app client"
+  type        = string
+  default     = "http://localhost:8080/auth/oauth/callback"
+}
+
+variable "frontend_auth_callback_url" {
+  description = "Frontend URL for successful social login return"
+  type        = string
+  default     = "http://localhost:5173/auth/callback"
+}
+
+variable "frontend_auth_cancel_url" {
+  description = "Frontend URL for cancelled/failed social login return"
+  type        = string
+  default     = "http://localhost:5173/auth/cancel"
+}
+
 # OAuth Provider Credentials (optional)
 variable "google_client_id" {
   description = "Google OAuth client ID"

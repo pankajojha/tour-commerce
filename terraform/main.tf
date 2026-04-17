@@ -119,6 +119,10 @@ module "auth_lambdas" {
   lambda_security_group_id  = module.network.lambda_security_group_id
   from_email                = var.from_email
   app_url                   = var.app_url
+  cognito_domain            = format("https://%s.auth.%s.amazoncognito.com", module.auth.user_pool_domain, var.aws_region)
+  oauth_callback_url        = var.oauth_callback_url
+  frontend_auth_callback_url = var.frontend_auth_callback_url
+  frontend_auth_cancel_url   = var.frontend_auth_cancel_url
 }
 
 # API Gateway

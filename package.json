@@ -14,6 +14,11 @@
     "test": "npm run test --workspaces --if-present",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"**/*.{ts,json,md}\"",
+    "db:local:build": "docker compose -f local/postgres/docker-compose.yml build",
+    "db:local:up": "docker compose -f local/postgres/docker-compose.yml up --build -d",
+    "db:local:down": "docker compose -f local/postgres/docker-compose.yml down",
+    "db:local:logs": "docker compose -f local/postgres/docker-compose.yml logs -f postgres",
+    "db:local:psql": "docker compose -f local/postgres/docker-compose.yml exec postgres psql -U postgres -d postgres",
     "deploy:infra": "cd infrastructure && npm run deploy",
     "synth:infra": "cd infrastructure && npm run synth"
   },

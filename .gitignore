@@ -60,3 +60,6 @@ terraform/terraform.tfvars
 
 # AWS CDK
 cdk.context.json
+
+# Local database data
+local/postgres/data/

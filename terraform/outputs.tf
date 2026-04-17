@@ -73,3 +73,13 @@ output "token_refresh_lambda_arn" {
   description = "Token refresh Lambda ARN"
   value       = module.auth_lambdas.token_refresh_lambda_arn
 }
+
+output "oauth_start_lambda_arn" {
+  description = "OAuth start Lambda ARN"
+  value       = module.auth_lambdas.oauth_start_lambda_arn
+}
+
+output "oauth_callback_lambda_arn" {
+  description = "OAuth callback Lambda ARN"
+  value       = module.auth_lambdas.oauth_callback_lambda_arn
+}
