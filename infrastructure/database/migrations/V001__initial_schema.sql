@@ -917,7 +917,238 @@ ALTER DATABASE postgres SET work_mem = '256MB';
 ALTER DATABASE postgres SET jit = on;
 
 -- ============================================================================
--- SECTION 20: MAINTENANCE
+-- SECTION 20: TRIP LIFECYCLE & RESTRICTION CONTROLS
+-- ============================================================================
+--
+-- These tables drive all trip state enforcement across the service layer and UI.
+-- The rules are loaded at runtime — no hardcoded state logic in application code.
+--
+-- Lifecycle (Option A — Strict Single-Use):
+--   draft → active → shared → finalized → consumed
+--   finalized and consumed are permanently immutable.
+-- ============================================================================
+
+-- ----------------------------------------------------------------------------
+-- 20.1  trip_status_transitions
+--       DB-driven FSM: defines every legal from → to status move.
+--       The service layer queries this table before accepting any status change.
+-- ----------------------------------------------------------------------------
+CREATE TABLE trip_status_transitions (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    from_status     VARCHAR(50) NOT NULL,
+    to_status       VARCHAR(50) NOT NULL,
+    allowed_scopes  JSONB        NOT NULL DEFAULT '["owner"]',
+    -- Which actor scopes may trigger this transition.
+    -- Values: "owner", "shared", "system"
+    requires_reason BOOLEAN      NOT NULL DEFAULT FALSE,
+    description     TEXT,
+    active          BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(from_status, to_status),
+    CONSTRAINT valid_from_status CHECK (from_status IN ('draft','active','shared','finalized','consumed')),
+    CONSTRAINT valid_to_status   CHECK (to_status   IN ('draft','active','shared','finalized','consumed'))
+);
+
+COMMENT ON TABLE trip_status_transitions IS
+    'FSM table: every row is a legal trip status transition. '
+    'The service layer validates against this before writing any status change. '
+    'No transition rows = all mutations blocked.';
+
+-- Seed the legal transitions (Option A — strict single-use, no reopen)
+INSERT INTO trip_status_transitions (from_status, to_status, allowed_scopes, requires_reason, description) VALUES
+    ('draft',     'active',    '["owner","system"]',         FALSE, 'Owner activates a draft trip'),
+    ('active',    'shared',    '["owner"]',                  FALSE, 'Owner opens the trip for collaboration'),
+    ('active',    'finalized', '["owner","system"]',         FALSE, 'Owner finalizes without sharing'),
+    ('shared',    'active',    '["owner"]',                  FALSE, 'Owner pulls back from shared to active'),
+    ('shared',    'finalized', '["owner","system"]',         FALSE, 'Owner finalizes a shared trip'),
+    ('finalized', 'consumed',  '["system"]',                 FALSE, 'System marks trip consumed after booking'),
+    -- Soft escape hatch: owner may archive any non-consumed trip with a reason
+    ('draft',     'consumed',  '["owner"]',                  TRUE,  'Owner explicitly abandons a draft'),
+    ('active',    'consumed',  '["owner"]',                  TRUE,  'Owner explicitly abandons an active trip'),
+    ('shared',    'consumed',  '["owner"]',                  TRUE,  'Owner explicitly abandons a shared trip');
+
+-- ----------------------------------------------------------------------------
+-- 20.2  trip_operation_rules
+--       Per-status rules that define what category of operation is permitted.
+--       Loaded by the service layer to enforce read/write/share/book access.
+-- ----------------------------------------------------------------------------
+CREATE TABLE trip_operation_rules (
+    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trip_status   VARCHAR(50)  NOT NULL,
+    operation     VARCHAR(100) NOT NULL,
+    -- Known operations: read, write_owner, write_contributor,
+    --                   add_member, remove_member, submit_intake,
+    --                   share, book, cancel, view_history
+    allowed       BOOLEAN      NOT NULL DEFAULT TRUE,
+    allowed_scopes JSONB       NOT NULL DEFAULT '["owner","shared","system"]',
+    -- Scopes that may perform this operation when allowed=TRUE.
+    reason        TEXT,
+    active        BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at    TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(trip_status, operation),
+    CONSTRAINT valid_op_status CHECK (trip_status IN ('draft','active','shared','finalized','consumed'))
+);
+
+COMMENT ON TABLE trip_operation_rules IS
+    'Per-status permission table: the service layer enforces every incoming '
+    'operation against the active row for the trip''s current status. '
+    'allowed=FALSE rows act as explicit denies.';
+
+INSERT INTO trip_operation_rules (trip_status, operation, allowed, allowed_scopes, reason) VALUES
+    -- draft
+    ('draft', 'read',              TRUE,  '["owner","system"]',              NULL),
+    ('draft', 'write_owner',       TRUE,  '["owner"]',                       NULL),
+    ('draft', 'write_contributor', FALSE, '[]',                              'Contributors may only write once trip is active or shared'),
+    ('draft', 'add_member',        FALSE, '[]',                              'Members cannot be added until trip is active'),
+    ('draft', 'remove_member',     FALSE, '[]',                              'No members to remove from a draft'),
+    ('draft', 'submit_intake',     FALSE, '[]',                              'Intake submission requires active or shared status'),
+    ('draft', 'share',             FALSE, '[]',                              'Trip must be active before sharing'),
+    ('draft', 'book',              FALSE, '[]',                              'Booking requires finalized status'),
+    ('draft', 'cancel',            FALSE, '[]',                              'No active booking to cancel from draft'),
+    ('draft', 'view_history',      TRUE,  '["owner","system"]',              NULL),
+
+    -- active
+    ('active', 'read',              TRUE,  '["owner","system"]',              NULL),
+    ('active', 'write_owner',       TRUE,  '["owner"]',                       NULL),
+    ('active', 'write_contributor', FALSE, '[]',                              'Contributor writes require shared status'),
+    ('active', 'add_member',        TRUE,  '["owner"]',                       NULL),
+    ('active', 'remove_member',     TRUE,  '["owner"]',                       NULL),
+    ('active', 'submit_intake',     TRUE,  '["owner"]',                       NULL),
+    ('active', 'share',             TRUE,  '["owner"]',                       NULL),
+    ('active', 'book',              FALSE, '[]',                              'Trip must be finalized before booking'),
+    ('active', 'cancel',            FALSE, '[]',                              'Nothing to cancel from active trip'),
+    ('active', 'view_history',      TRUE,  '["owner","system"]',              NULL),
+
+    -- shared
+    ('shared', 'read',              TRUE,  '["owner","shared","system"]',     NULL),
+    ('shared', 'write_owner',       TRUE,  '["owner"]',                       NULL),
+    ('shared', 'write_contributor', TRUE,  '["shared"]',                      NULL),
+    ('shared', 'add_member',        TRUE,  '["owner"]',                       NULL),
+    ('shared', 'remove_member',     TRUE,  '["owner"]',                       NULL),
+    ('shared', 'submit_intake',     TRUE,  '["owner","shared"]',              NULL),
+    ('shared', 'share',             FALSE, '[]',                              'Trip is already shared'),
+    ('shared', 'book',              FALSE, '[]',                              'Trip must be finalized before booking'),
+    ('shared', 'cancel',            FALSE, '[]',                              'Nothing to cancel from shared trip'),
+    ('shared', 'view_history',      TRUE,  '["owner","shared","system"]',     NULL),
+
+    -- finalized (immutable — read + book only)
+    ('finalized', 'read',              TRUE,  '["owner","shared","system"]', NULL),
+    ('finalized', 'write_owner',       FALSE, '[]',                          'Finalized trips are immutable'),
+    ('finalized', 'write_contributor', FALSE, '[]',                          'Finalized trips are immutable'),
+    ('finalized', 'add_member',        FALSE, '[]',                          'Finalized trips are immutable'),
+    ('finalized', 'remove_member',     FALSE, '[]',                          'Finalized trips are immutable'),
+    ('finalized', 'submit_intake',     FALSE, '[]',                          'Finalized trips are immutable'),
+    ('finalized', 'share',             FALSE, '[]',                          'Finalized trips are immutable'),
+    ('finalized', 'book',              TRUE,  '["owner","system"]',           NULL),
+    ('finalized', 'cancel',            FALSE, '[]',                          'No booking to cancel from finalized trip'),
+    ('finalized', 'view_history',      TRUE,  '["owner","shared","system"]', NULL),
+
+    -- consumed (permanently read-only)
+    ('consumed', 'read',              TRUE,  '["owner","shared","system"]', NULL),
+    ('consumed', 'write_owner',       FALSE, '[]',                          'Consumed trips are permanently read-only'),
+    ('consumed', 'write_contributor', FALSE, '[]',                          'Consumed trips are permanently read-only'),
+    ('consumed', 'add_member',        FALSE, '[]',                          'Consumed trips are permanently read-only'),
+    ('consumed', 'remove_member',     FALSE, '[]',                          'Consumed trips are permanently read-only'),
+    ('consumed', 'submit_intake',     FALSE, '[]',                          'Consumed trips are permanently read-only'),
+    ('consumed', 'share',             FALSE, '[]',                          'Consumed trips are permanently read-only'),
+    ('consumed', 'book',              FALSE, '[]',                          'Consumed trips are permanently read-only'),
+    ('consumed', 'cancel',            TRUE,  '["owner","system"]',          'Owner or system may cancel a booking on a consumed trip'),
+    ('consumed', 'view_history',      TRUE,  '["owner","shared","system"]', NULL);
+
+-- ----------------------------------------------------------------------------
+-- 20.3  trip_ui_hints
+--       Per-status UI directives loaded by the front-end.
+--       Decouples presentation logic from hardcoded React conditions.
+-- ----------------------------------------------------------------------------
+CREATE TABLE trip_ui_hints (
+    id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trip_status       VARCHAR(50)  NOT NULL UNIQUE,
+    banner_variant    VARCHAR(50)  NOT NULL DEFAULT 'info',
+    -- Values: info, warning, success, error, readonly
+    banner_message    TEXT         NOT NULL,
+    show_edit_actions BOOLEAN      NOT NULL DEFAULT TRUE,
+    show_new_trip_cta BOOLEAN      NOT NULL DEFAULT FALSE,
+    cta_label         VARCHAR(100),
+    cta_action        VARCHAR(100),
+    -- Action key the UI dispatches on CTA click: e.g. 'start_new_trip'
+    active            BOOLEAN      NOT NULL DEFAULT TRUE,
+    created_at        TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT valid_ui_hint_status CHECK (trip_status IN ('draft','active','shared','finalized','consumed'))
+);
+
+COMMENT ON TABLE trip_ui_hints IS
+    'UI directive rows loaded by the front-end to render status banners and '
+    'control which actions are visible. Changes here are reflected in the UI '
+    'without a code deployment.';
+
+INSERT INTO trip_ui_hints
+    (trip_status, banner_variant, banner_message, show_edit_actions, show_new_trip_cta, cta_label, cta_action)
+VALUES
+    ('draft',     'info',     'Your trip is in draft. Fill in your details and activate when ready.',
+                               TRUE,  FALSE, NULL, NULL),
+    ('active',    'info',     'Your trip is active. Complete all sections and finalize when ready.',
+                               TRUE,  FALSE, NULL, NULL),
+    ('shared',    'warning',  'This trip is open for collaboration. Finalize it to lock contributions.',
+                               TRUE,  FALSE, NULL, NULL),
+    ('finalized', 'success',  'This trip is finalized and ready to book. No further edits are allowed.',
+                               FALSE, FALSE, NULL, NULL),
+    ('consumed',  'readonly', 'This trip has been completed and is now read-only. Start a new trip to plan your next adventure.',
+                               FALSE, TRUE,  'Start New Trip', 'start_new_trip');
+
+-- ----------------------------------------------------------------------------
+-- 20.4  trip_status_change_log
+--       Immutable audit log of every trip status change.
+-- ----------------------------------------------------------------------------
+CREATE TABLE trip_status_change_log (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    trip_plan_id    UUID         NOT NULL,
+    -- NOTE: FK to trip_plans is in V002; omitted here to keep V001 self-contained.
+    --       Add FK constraint via ALTER TABLE in V002 if execution order requires it.
+    from_status     VARCHAR(50),
+    to_status       VARCHAR(50)  NOT NULL,
+    changed_by_user_id UUID,
+    actor_scope     VARCHAR(50)  NOT NULL DEFAULT 'owner',
+    reason          TEXT,
+    source          VARCHAR(100) NOT NULL DEFAULT 'service',
+    -- Values: service, system, admin_override
+    correlation_id  VARCHAR(128),
+    created_at      TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT valid_log_from_status CHECK (from_status IS NULL OR from_status IN ('draft','active','shared','finalized','consumed')),
+    CONSTRAINT valid_log_to_status   CHECK (to_status IN ('draft','active','shared','finalized','consumed')),
+    CONSTRAINT valid_log_actor_scope CHECK (actor_scope IN ('owner','shared','system','admin'))
+);
+
+COMMENT ON TABLE trip_status_change_log IS
+    'Append-only log of every trip lifecycle state change. '
+    'Used for audit, debugging, and compliance reporting.';
+
+-- Prevent updates and deletes on this log table
+CREATE OR REPLACE FUNCTION prevent_trip_status_log_mutation()
+RETURNS TRIGGER AS $$
+BEGIN
+    RAISE EXCEPTION 'trip_status_change_log is immutable';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER prevent_trip_status_log_update
+    BEFORE UPDATE ON trip_status_change_log
+    FOR EACH ROW EXECUTE FUNCTION prevent_trip_status_log_mutation();
+
+CREATE TRIGGER prevent_trip_status_log_delete
+    BEFORE DELETE ON trip_status_change_log
+    FOR EACH ROW EXECUTE FUNCTION prevent_trip_status_log_mutation();
+
+-- ----------------------------------------------------------------------------
+-- 20.5  Indexes for runtime lookups
+-- ----------------------------------------------------------------------------
+CREATE INDEX idx_trip_status_transitions_from ON trip_status_transitions(from_status) WHERE active = TRUE;
+CREATE INDEX idx_trip_operation_rules_status   ON trip_operation_rules(trip_status)   WHERE active = TRUE;
+CREATE INDEX idx_trip_ui_hints_status          ON trip_ui_hints(trip_status)          WHERE active = TRUE;
+CREATE INDEX idx_trip_status_change_log_trip   ON trip_status_change_log(trip_plan_id);
+CREATE INDEX idx_trip_status_change_log_time   ON trip_status_change_log(created_at DESC);
+
+-- ============================================================================
+-- SECTION 21: MAINTENANCE
 -- ============================================================================
 
 -- Vacuum and analyze all tables
@@ -928,16 +1159,19 @@ VACUUM ANALYZE;
 -- ============================================================================
 
 -- Summary of schema objects created:
--- - 19 Tables (users, social_profiles, sessions, destinations, categories, suppliers, 
---   excursions, excursion_schedules, cruise_port_calls, flight_arrivals, 
---   inventory_records, pricing_configurations, bookings, payments, refunds, 
---   reviews, audit_logs)
--- - 60+ Indexes for query optimization
--- - 15+ Triggers for automatic timestamp updates and rating calculations
+-- - 23 Tables (users, social_profiles, sessions, destinations, categories, suppliers,
+--   excursions, excursion_schedules, cruise_port_calls, flight_arrivals,
+--   inventory_records, pricing_configurations, bookings, payments, refunds,
+--   reviews, audit_logs,
+--   trip_status_transitions, trip_operation_rules, trip_ui_hints,
+--   trip_status_change_log)
+-- - 70+ Indexes for query optimization
+-- - 17+ Triggers for automatic timestamp updates, rating calculations,
+--   and immutability enforcement
 -- - 1 pg_cron job for session cleanup
--- - 5 Utility functions for business logic
+-- - 6 Utility functions for business logic
 -- - 4 Views for reporting and dashboards
 -- - 2 Database roles for security
--- - Sample category data
+-- - Sample category data + full trip lifecycle seed data
 
-COMMENT ON DATABASE postgres IS 'Explorer Excursion Booking Platform - Production Ready Schema v1.0';
+COMMENT ON DATABASE postgres IS 'Explorer Excursion Booking Platform - Production Ready Schema v1.1';

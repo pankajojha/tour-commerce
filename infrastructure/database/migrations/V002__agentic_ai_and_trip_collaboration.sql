@@ -43,12 +43,27 @@ CREATE TABLE trip_plans (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     owner_user_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     title VARCHAR(255) NOT NULL,
-    status VARCHAR(50) NOT NULL DEFAULT 'Active' CHECK (status IN ('Draft', 'Active', 'Locked', 'Archived')),
+    -- Status values must match trip_status_transitions / trip_operation_rules seed data in V001.
+    -- 'consumed' is the only terminal state; the partial unique index below enforces one active trip per owner.
+    status VARCHAR(50) NOT NULL DEFAULT 'draft'
+        CHECK (status IN ('draft', 'active', 'shared', 'finalized', 'consumed')),
+    -- Trip window. trip_end_date is optional in draft but REQUIRED before the trip can leave draft.
+    -- Validated by the enforce_trip_end_date_on_activation trigger below.
+    trip_start_date DATE,
+    trip_end_date   DATE,
+    CONSTRAINT trip_date_order CHECK (
+        trip_start_date IS NULL
+        OR trip_end_date IS NULL
+        OR trip_end_date >= trip_start_date
+    ),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
-COMMENT ON TABLE trip_plans IS 'Top-level trip planner entity with a single owning user';
+COMMENT ON TABLE trip_plans IS
+    'Top-level trip planner entity with a single owning user. '
+    'A user may only have one non-consumed trip at a time (enforced by uq_one_active_trip_per_owner). '
+    'trip_end_date is mandatory before the trip can leave draft status.';
 
 CREATE TABLE trip_plan_members (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -233,6 +248,13 @@ COMMENT ON TABLE webhook_callbacks IS 'Callback processing outcomes; duplicate c
 -- SECTION 5: INDEXES
 -- ============================================================================
 
+-- One active trip per owner: a user cannot start a new trip until the previous one is consumed.
+-- The partial index covers all non-terminal statuses. INSERT will fail with a unique-violation
+-- if the user already owns a draft/active/shared/finalized trip.
+CREATE UNIQUE INDEX uq_one_active_trip_per_owner
+    ON trip_plans(owner_user_id)
+    WHERE status IN ('draft', 'active', 'shared', 'finalized');
+
 CREATE INDEX idx_trip_plans_owner_user_id ON trip_plans(owner_user_id);
 CREATE INDEX idx_trip_plan_members_trip_plan_id ON trip_plan_members(trip_plan_id);
 CREATE INDEX idx_trip_plan_members_user_id ON trip_plan_members(user_id);
@@ -336,6 +358,141 @@ CREATE TRIGGER prevent_ai_outputs_update
 -- NOTE: DELETE on ai_outputs is intentionally allowed for retention cleanup once retain_until has passed.
 
 -- ============================================================================
+-- SECTION 7b: TRIP DATE ENFORCEMENT + ENTRY DATE-RANGE VALIDATION
+-- ============================================================================
+
+-- ── 7b.1  Enforce end-date before a trip leaves draft ──────────────────────
+--
+-- No trip may advance from 'draft' to any other status unless trip_end_date
+-- is set. This is checked on EVERY status-changing UPDATE to trip_plans.
+--
+CREATE OR REPLACE FUNCTION enforce_trip_end_date_on_activation()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Only act when status is actually changing away from 'draft'
+    IF OLD.status = 'draft' AND NEW.status <> 'draft' THEN
+        IF NEW.trip_end_date IS NULL THEN
+            RAISE EXCEPTION
+                'trip_end_date is required before a trip can leave draft status (trip_id: %)', NEW.id
+                USING ERRCODE = 'check_violation';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER enforce_trip_end_date_before_activation
+    BEFORE UPDATE ON trip_plans
+    FOR EACH ROW EXECUTE FUNCTION enforce_trip_end_date_on_activation();
+
+-- ── 7b.2  Validate section entry dates are within the trip window ───────────
+--
+-- For time-bounded categories (flight, cruise, hotel, car), the content JSONB
+-- MUST contain a "start_date" field (ISO-8601 DATE string). If the trip has
+-- trip_end_date set, the entry start_date must be <= trip_end_date. If the trip
+-- has trip_start_date set, the entry start_date must be >= trip_start_date.
+--
+-- Expected content schema per category:
+--   flight   : {"departure_date": "YYYY-MM-DD", ...}
+--   hotel    : {"check_in_date":  "YYYY-MM-DD", "check_out_date": "YYYY-MM-DD", ...}
+--   cruise   : {"embark_date":    "YYYY-MM-DD", "disembark_date": "YYYY-MM-DD", ...}
+--   car      : {"pickup_date":    "YYYY-MM-DD", "return_date":    "YYYY-MM-DD", ...}
+--   excursions, budget, notes: not date-validated
+--
+CREATE OR REPLACE FUNCTION validate_section_entry_date_range()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_trip_start DATE;
+    v_trip_end   DATE;
+    v_category   VARCHAR(50);
+    v_entry_start DATE;
+    v_entry_end   DATE;
+BEGIN
+    -- Resolve the trip dates and category from the section
+    SELECT p.trip_start_date, p.trip_end_date, s.category
+    INTO v_trip_start, v_trip_end, v_category
+    FROM trip_plan_sections s
+    JOIN trip_plans p ON p.id = s.trip_plan_id
+    WHERE s.id = NEW.section_id;
+
+    -- Only validate time-bounded categories
+    IF v_category NOT IN ('flight', 'hotel', 'cruise', 'car') THEN
+        RETURN NEW;
+    END IF;
+
+    -- Extract entry start date by category
+    v_entry_start := CASE v_category
+        WHEN 'flight'  THEN (NEW.content ->> 'departure_date')::DATE
+        WHEN 'hotel'   THEN (NEW.content ->> 'check_in_date')::DATE
+        WHEN 'cruise'  THEN (NEW.content ->> 'embark_date')::DATE
+        WHEN 'car'     THEN (NEW.content ->> 'pickup_date')::DATE
+        ELSE NULL
+    END;
+
+    v_entry_end := CASE v_category
+        WHEN 'flight'  THEN (NEW.content ->> 'arrival_date')::DATE
+        WHEN 'hotel'   THEN (NEW.content ->> 'check_out_date')::DATE
+        WHEN 'cruise'  THEN (NEW.content ->> 'disembark_date')::DATE
+        WHEN 'car'     THEN (NEW.content ->> 'return_date')::DATE
+        ELSE NULL
+    END;
+
+    -- If content has no date fields yet (still being filled), allow it
+    IF v_entry_start IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    -- Validate end precedes start within the entry itself
+    IF v_entry_end IS NOT NULL AND v_entry_end < v_entry_start THEN
+        RAISE EXCEPTION
+            'Entry end date (%) is before start date (%) for category %',
+            v_entry_end, v_entry_start, v_category
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- Validate entry start is >= trip start (if trip start is set)
+    IF v_trip_start IS NOT NULL AND v_entry_start < v_trip_start THEN
+        RAISE EXCEPTION
+            '% entry start date (%) is before the trip start date (%)',
+            v_category, v_entry_start, v_trip_start
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- Validate entry start is <= trip end (if trip end is set)
+    IF v_trip_end IS NOT NULL AND v_entry_start > v_trip_end THEN
+        RAISE EXCEPTION
+            '% entry start date (%) is after the trip end date (%)',
+            v_category, v_entry_start, v_trip_end
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    -- Validate entry end (if present) is <= trip end
+    IF v_trip_end IS NOT NULL AND v_entry_end IS NOT NULL AND v_entry_end > v_trip_end THEN
+        RAISE EXCEPTION
+            '% entry end date (%) extends beyond the trip end date (%)',
+            v_category, v_entry_end, v_trip_end
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    RETURN NEW;
+EXCEPTION
+    WHEN invalid_datetime_format OR invalid_text_representation THEN
+        RAISE EXCEPTION
+            'Invalid date format in % content for category %. Use YYYY-MM-DD.',
+            v_category, v_category
+            USING ERRCODE = 'invalid_datetime_format';
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER validate_entry_dates_on_insert
+    BEFORE INSERT ON trip_plan_section_entries
+    FOR EACH ROW EXECUTE FUNCTION validate_section_entry_date_range();
+
+CREATE TRIGGER validate_entry_dates_on_update
+    BEFORE UPDATE OF content ON trip_plan_section_entries
+    FOR EACH ROW EXECUTE FUNCTION validate_section_entry_date_range();
+
+-- ============================================================================
 -- SECTION 8: RLS ENABLEMENT + BASE POLICIES
 -- ============================================================================
 
@@ -415,45 +572,81 @@ USING (
     )
 );
 
--- insert: contributor can create own row, owner can insert for budget/notes override use cases
+-- insert: contributor can create their own row; only allowed when trip status
+-- permits write_owner (if caller is trip owner) or write_contributor (if shared member).
+-- Checked by the trip_entry_write_allowed() helper function.
+CREATE OR REPLACE FUNCTION trip_entry_write_allowed(p_section_id UUID, p_caller_id UUID)
+RETURNS BOOLEAN AS $$
+DECLARE
+    v_trip_status    VARCHAR(50);
+    v_is_owner       BOOLEAN;
+    v_operation      VARCHAR(100);
+    v_allowed        BOOLEAN;
+    v_scopes_raw     JSONB;
+BEGIN
+    -- Resolve trip status and whether caller is the owner
+    SELECT p.status, (p.owner_user_id = p_caller_id)
+    INTO v_trip_status, v_is_owner
+    FROM trip_plan_sections s
+    JOIN trip_plans p ON p.id = s.trip_plan_id
+    WHERE s.id = p_section_id;
+
+    IF NOT FOUND THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Owner uses write_owner; shared member uses write_contributor
+    v_operation := CASE WHEN v_is_owner THEN 'write_owner' ELSE 'write_contributor' END;
+
+    SELECT r.allowed, r.allowed_scopes
+    INTO v_allowed, v_scopes_raw
+    FROM trip_operation_rules r
+    WHERE r.trip_status = v_trip_status
+      AND r.operation   = v_operation
+      AND r.active      = TRUE;
+
+    IF NOT FOUND OR NOT v_allowed THEN
+        RETURN FALSE;
+    END IF;
+
+    -- Check that the caller's scope appears in allowed_scopes
+    RETURN CASE
+        WHEN v_is_owner    THEN v_scopes_raw ? 'owner'
+        WHEN EXISTS (
+            SELECT 1 FROM trip_plan_members m
+            JOIN trip_plan_sections s ON s.trip_plan_id = m.trip_plan_id
+            WHERE s.id = p_section_id AND m.user_id = p_caller_id
+        ) THEN v_scopes_raw ? 'shared'
+        ELSE FALSE
+    END;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+COMMENT ON FUNCTION trip_entry_write_allowed IS
+    'Returns TRUE when the caller may write a section entry based on current trip status '
+    'and the trip_operation_rules table. The owner can write their own entries in shared mode. '
+    'Nobody may write in finalized or consumed status.';
+
 CREATE POLICY trip_plan_section_entries_insert_policy ON trip_plan_section_entries
 FOR INSERT
 WITH CHECK (
+    -- Caller must own the entry row being inserted
     contributor_user_id = current_app_user_id()
-    OR EXISTS (
-        SELECT 1
-        FROM trip_plan_sections s
-        JOIN trip_plans p ON p.id = s.trip_plan_id
-        WHERE s.id = trip_plan_section_entries.section_id
-          AND p.owner_user_id = current_app_user_id()
-          AND s.category IN ('budget', 'notes')
-    )
+    -- Trip status must allow the write for the caller's role
+    AND trip_entry_write_allowed(section_id, current_app_user_id())
 );
 
--- update: contributor can update own entry; owner can override budget/notes entries
+-- update: same rules — contributor edits only their own entry, and only when
+-- the trip status allows writing (owner in shared mode CAN edit their own rows).
 CREATE POLICY trip_plan_section_entries_update_policy ON trip_plan_section_entries
 FOR UPDATE
 USING (
     contributor_user_id = current_app_user_id()
-    OR EXISTS (
-        SELECT 1
-        FROM trip_plan_sections s
-        JOIN trip_plans p ON p.id = s.trip_plan_id
-        WHERE s.id = trip_plan_section_entries.section_id
-          AND p.owner_user_id = current_app_user_id()
-          AND s.category IN ('budget', 'notes')
-    )
+    AND trip_entry_write_allowed(section_id, current_app_user_id())
 )
 WITH CHECK (
     contributor_user_id = current_app_user_id()
-    OR EXISTS (
-        SELECT 1
-        FROM trip_plan_sections s
-        JOIN trip_plans p ON p.id = s.trip_plan_id
-        WHERE s.id = trip_plan_section_entries.section_id
-          AND p.owner_user_id = current_app_user_id()
-          AND s.category IN ('budget', 'notes')
-    )
+    AND trip_entry_write_allowed(section_id, current_app_user_id())
 );
 
 -- ============================================================================
