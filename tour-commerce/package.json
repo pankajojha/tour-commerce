@@ -1,0 +1,22 @@
+{
+  "name": "tour-commerce",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Commerce system for tour-planner: cart, checkout, orders, payments, and AI recommendations",
+  "workspaces": [
+    "infrastructure"
+  ],
+  "scripts": {
+    "build:cart":     "cd services/cart && make build",
+    "build:checkout": "cd services/checkout && make build",
+    "build:orders":   "cd services/orders && make build",
+    "build:payments": "cd services/payments && make build",
+    "build:ai":       "cd services/ai-commerce && make build",
+    "build":          "npm run build:cart && npm run build:checkout && npm run build:orders && npm run build:payments && npm run build:ai",
+    "infra:synth":    "cd infrastructure && npx cdk synth",
+    "infra:deploy":   "cd infrastructure && npx cdk deploy --all"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
