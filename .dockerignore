@@ -1,0 +1,15 @@
+**/.git
+**/.venv
+**/venv
+**/node_modules
+**/dist
+**/build
+**/.next
+**/cdk.out
+**/coverage
+**/__pycache__
+**/.terraform
+**/.turbo
+**/*.html
+!tour-agent-docs/architecture-dossier.html
+docs-site-out
