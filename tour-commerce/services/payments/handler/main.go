@@ -37,8 +37,8 @@ type routeHandler func(context.Context, events.APIGatewayProxyRequest) (events.A
 
 func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	routes := map[string]routeHandler{
-		"POST /commerce/payments/intent":           handleCreateIntent,
-		"POST /commerce/payments/webhook":          handleWebhook,
+		"POST /commerce/payments/intent":            handleCreateIntent,
+		"POST /commerce/payments/webhook":           handleWebhook,
 		"POST /commerce/payments/{order_id}/refund": handleRefund,
 	}
 	key := matchRoute(req.HTTPMethod, req.Path)
@@ -91,7 +91,9 @@ func handleCreateIntent(ctx context.Context, req events.APIGatewayProxyRequest) 
 	params := &stripe.PaymentIntentParams{
 		Amount:   stripe.Int64(amountCents),
 		Currency: stripe.String(cur),
-		Metadata: map[string]string{"order_id": body.OrderID},
+		Params: stripe.Params{
+			Metadata: map[string]string{"order_id": body.OrderID},
+		},
 	}
 	pi, stripeErr := paymentintent.New(params)
 	if stripeErr != nil {
