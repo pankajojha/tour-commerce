@@ -21,7 +21,7 @@ Practical patterns for working in this monorepo. Read `design.md` for architectu
 2. Create `handler/main.go` following the router pattern in any existing service.
 3. Create `<pkg>/db.go` with `Open()` reading `DATABASE_URL` from env.
 4. Copy a `Makefile` from an existing service and update `FUNCTION_NAME`.
-5. Add a CDK `NodejsFunction` / `GoFunction` construct in `tour-agent/infrastructure/`.
+5. Add a CDK `NodejsFunction` / `GoFunction` construct in `tour-agent-infra/infrastructure/`.
 6. Wire the Lambda to API Gateway with Cognito authorizer.
 
 ### Auth sub-handlers
@@ -35,7 +35,7 @@ Each subdirectory under `tour-agent/services/auth/` (`login/`, `signup/`, `oauth
 ### Deploying a stack change
 
 ```bash
-cd tour-agent/infrastructure
+cd tour-agent-infra/infrastructure
 npm --workspace=infrastructure run build   # compile TypeScript
 npx cdk diff                               # review changes
 npx cdk deploy ExplorerAgent-<StackName>   # deploy one stack
@@ -56,7 +56,7 @@ Add a `new s3.Bucket(...)` in `StorageStack`. For sensitive content use `BucketE
 
 ## Database Migrations
 
-Migrations live in `tour-agent/infrastructure/database/migrations/` and are applied by the `DatabaseSchemaStack` custom resource Lambda using Flyway on CDK deploy.
+Migrations live in `tour-agent-infra/infrastructure/database/migrations/` and are applied by the `DatabaseSchemaStack` custom resource Lambda using Flyway on CDK deploy.
 
 ### Adding a migration
 
@@ -69,7 +69,7 @@ Migrations live in `tour-agent/infrastructure/database/migrations/` and are appl
 ### Local Postgres
 
 ```bash
-cd tour-agent/local/postgres
+cd tour-agent-infra/local/postgres
 docker-compose up -d
 # Migrations applied automatically by initdb/10_apply_migrations.sh
 ```
@@ -209,7 +209,7 @@ All env vars are `VITE_` prefixed. Copy `.env.example` to `.env` and fill in API
 
 ```bash
 # 1. Start Postgres with migrations
-cd tour-agent/local/postgres && docker-compose up -d
+cd tour-agent-infra/local/postgres && docker-compose up -d
 
 # 2. Start tour-planner-ai mock API
 cd tour-planner-ai/tourplannerai-api

@@ -6,18 +6,19 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository Layout
 
-This is a monorepo for a cruise shore-excursion booking platform. Five top-level workspaces plus a business-docs folder:
+This is a monorepo for a cruise shore-excursion booking platform. Six top-level workspaces plus a business-docs folder:
 
 | Directory | Language / Runtime | Role |
 |---|---|---|
-| `tour-agent/` | Go 1.21 + AWS CDK (TypeScript) | Core transactional backend — auth, trips, policy, AI proxy |
+| `tour-agent/` | Go 1.21 | Core transactional backend services — auth, trips, policy, AI proxy |
+| `tour-agent-infra/` | Terraform + AWS CDK (TypeScript) | All tour-agent infrastructure and database code — Terraform roots, CDK stacks, Flyway migrations, local Postgres |
 | `tour-planner-ai/` | Python 3.11 + AWS CDK (TypeScript) | Bedrock AgentCore AI orchestration |
 | `tour-planner-ui/` | React 19 + TypeScript + Vite | Frontend SPA |
 | `tour-commerce/` | Go 1.21 + AWS CDK (TypeScript) | Commerce layer — cart, checkout, orders, payments |
 | `tour-planner-cms/` | Strapi (Node.js) | Headless CMS |
 | `tour-agent-docs/` | Markdown | Business / go-to-market documentation (not code) |
 
-> **IaC note**: `tour-agent/terraform/` contains an early Terraform spike — it is not actively maintained. AWS CDK (`tour-agent/infrastructure/`) is the canonical infrastructure-as-code tool for this project.
+> **IaC note**: `tour-agent-infra/terraform/` is the **live** infrastructure-as-code for the deployed AWS environment (local state file, API Gateway, auth Lambdas, Cognito) — deploy with targeted plans (`terraform plan -target=… -out=…` then `terraform apply <plan>`). `tour-agent-infra/infrastructure/` holds the AWS CDK stacks (fuller design, not the currently deployed path). `tour-agent-infra/findmytour-tf/` manages the findmytour.ai Cloudflare deployment.
 
 ---
 
@@ -51,14 +52,14 @@ cd tour-agent/services/trips && make deploy FUNCTION_NAME=my-function
 
 Infrastructure (CDK):
 ```bash
-cd tour-agent/infrastructure
+cd tour-agent-infra/infrastructure
 npm install
-npm --workspace=infrastructure run build   # use this, NOT bare `tsc` — see note below
+npm run build      # use this, NOT bare `tsc` — see note below
 npx cdk synth
 npx cdk deploy --all
 ```
 
-> **tsc note**: a stray `tsc` npm package can shadow the TypeScript compiler. Always use `npm exec -- tsc` or `npm --workspace=infrastructure run build`, not a bare `tsc` invocation.
+> **tsc note**: a stray `tsc` npm package can shadow the TypeScript compiler. Always use `npm exec -- tsc` or `npm run build`, not a bare `tsc` invocation.
 
 AWS identity (account `727974078184`, region `us-east-1`):
 ```bash
@@ -182,7 +183,7 @@ tour-planner-ui  ─────────────────────
 
 ### tour-agent database schema (PostgreSQL / Aurora Serverless v2)
 
-Four versioned migrations in `tour-agent/infrastructure/database/migrations/`:
+Six versioned migrations in `tour-agent-infra/infrastructure/database/migrations/`:
 - **V001** — Core schema: users, social profiles, sessions, destinations, categories, suppliers, excursions, schedules, bookings, payments, reviews, inventory, pricing
 - **V002** — AI orchestration: ai_runs, webhooks, trip collaboration tables (trip_plans, trip_category_entries, contributor blocks), ownership/RLS scaffolding
 - **V003** — Corporate policy engine: 5-tier RBAC (platform_admin → company_admin → travel_manager → dept_manager → traveler), policy rules, approval workflows
@@ -217,7 +218,7 @@ The mock tool API (port 8001) must be running for the full agent → tool pipeli
 
 ### CDK Infrastructure Stacks (tour-agent)
 
-Seven CDK stacks in `tour-agent/infrastructure/lib/stacks/`:
+Seven CDK stacks in `tour-agent-infra/infrastructure/lib/stacks/`:
 
 | Stack | What it provisions |
 |---|---|
