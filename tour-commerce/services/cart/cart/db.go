@@ -1,253 +1,243 @@
 package cart
 
 import (
+	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
-
-	_ "github.com/lib/pq"
+	"strings"
+	"time"
 )
 
-// Open returns a connected *sql.DB using DATABASE_URL from the environment.
-func Open() (*sql.DB, error) {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		return nil, fmt.Errorf("DATABASE_URL is not set")
-	}
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return nil, err
-	}
-	if err = db.Ping(); err != nil {
-		return nil, err
-	}
-	return db, nil
+// SQL has been migrated to db-proxy (internal/queries/cart_query.go). This
+// package now speaks to db-proxy's /api/cart/* domain APIs over HTTP; it sends
+// parameters as JSON and never builds SQL.
+
+// Client calls db-proxy domain APIs. Modeled on trips/handler/dbproxy_client.go:
+// reads DB_PROXY_URL + DB_PROXY_API_KEY and POSTs JSON with a Bearer token.
+type Client struct {
+	baseURL      string
+	apiKey       string
+	clientID     string
+	clientSecret string
+	http         *http.Client
 }
 
-// GetCart fetches a cart with its items by cart ID.
-func GetCart(ctx context.Context, db *sql.DB, cartID string) (*Cart, error) {
-	c := &Cart{}
-	var tripPlanID sql.NullString
-	var expiresAt sql.NullTime
-	var metaRaw []byte
+// ErrNotFound mirrors a 404 from the db-proxy domain API.
+var ErrNotFound = errors.New("not found")
 
-	err := db.QueryRowContext(ctx, `
-		SELECT id, user_id, trip_plan_id, status, currency, metadata, expires_at, created_at, updated_at
-		FROM commerce_carts WHERE id = $1
-	`, cartID).Scan(
-		&c.ID, &c.UserID, &tripPlanID, &c.Status, &c.Currency,
-		&metaRaw, &expiresAt, &c.CreatedAt, &c.UpdatedAt,
-	)
-	if err == sql.ErrNoRows {
+// Open returns a configured db-proxy Client. Kept as Open() so callers do not
+// change their initialization flow.
+func Open() (*Client, error) {
+	base := normalizeProxyBaseURL(firstNonEmpty(
+		os.Getenv("DB_PROXY_URL"), os.Getenv("DATABASE_PROXY_URL"),
+		os.Getenv("DB_PROXY_ADDR"), os.Getenv("DATABASE_PROXY_ADDR"),
+		proxyTarget(),
+	))
+	if base == "" {
+		return nil, fmt.Errorf("db-proxy base URL not configured (set DB_PROXY_URL)")
+	}
+	return &Client{
+		baseURL:      strings.TrimRight(base, "/"),
+		apiKey:       os.Getenv("DB_PROXY_API_KEY"),
+		clientID:     getenvDefault("DB_PROXY_CLIENT_ID", "johnpankaj"),
+		clientSecret: getenvDefault("DB_PROXY_CLIENT_SECRET", "exploreragents2findmytour"),
+		http:         &http.Client{Timeout: 15 * time.Second},
+	}, nil
+}
+
+func proxyTarget() string {
+	if host := firstNonEmpty(os.Getenv("DB_PROXY_HOST"), os.Getenv("DATABASE_PROXY_HOST")); host != "" {
+		port := firstNonEmpty(os.Getenv("DB_PROXY_PORT"), os.Getenv("DATABASE_PROXY_PORT"), "8090")
+		return host + ":" + port
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// getenvDefault returns the env var value or fallback when unset/empty.
+func getenvDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func normalizeProxyBaseURL(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	if strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") {
+		return v
+	}
+	if strings.HasSuffix(v, ":443") || strings.EqualFold(os.Getenv("DB_PROXY_TLS"), "true") {
+		return "https://" + v
+	}
+	return "http://" + v
+}
+
+// post sends a JSON body to the given /api path and decodes the JSON response
+// into out. A 404 is surfaced as ErrNotFound so callers can preserve their
+// "not found" response shapes.
+func (c *Client) post(ctx context.Context, path string, body any, out any) error {
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	if c.clientID != "" {
+		req.Header.Set("X-Client-Id", c.clientID)
+	}
+	if c.clientSecret != "" {
+		req.Header.Set("X-Client-Secret", c.clientSecret)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		if out == nil {
+			return nil
+		}
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+			return fmt.Errorf("decode %s response: %w", path, err)
+		}
+		return nil
+	case http.StatusNotFound:
+		return ErrNotFound
+	default:
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("db-proxy %s: status %d: %s", path, resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+}
+
+// ─── domain calls (same signatures as before, minus the SQL) ──────────────────
+
+// GetCart fetches a cart with its items by cart ID. Returns (nil, nil) when the
+// cart is absent, preserving the original contract.
+func GetCart(ctx context.Context, c *Client, cartID string) (*Cart, error) {
+	var cart Cart
+	err := c.post(ctx, "/api/cart/get", map[string]string{"cart_id": cartID}, &cart)
+	if errors.Is(err, ErrNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("GetCart: %w", err)
 	}
-	if tripPlanID.Valid {
-		c.TripPlanID = &tripPlanID.String
-	}
-	if expiresAt.Valid {
-		c.ExpiresAt = &expiresAt.Time
-	}
-	_ = json.Unmarshal(metaRaw, &c.Metadata)
-
-	items, err := getCartItems(ctx, db, cartID)
-	if err != nil {
-		return nil, err
-	}
-	c.Items = items
-	c.TotalAmount = sumItems(items)
-	return c, nil
+	return &cart, nil
 }
 
 // GetActiveCartForUser returns the user's active cart, or nil.
-func GetActiveCartForUser(ctx context.Context, db *sql.DB, userID string) (*Cart, error) {
-	var cartID string
-	err := db.QueryRowContext(ctx,
-		`SELECT id FROM commerce_carts WHERE user_id = $1 AND status = 'active' LIMIT 1`,
-		userID,
-	).Scan(&cartID)
-	if err == sql.ErrNoRows {
+func GetActiveCartForUser(ctx context.Context, c *Client, userID string) (*Cart, error) {
+	var cart Cart
+	err := c.post(ctx, "/api/cart/active", map[string]string{"user_id": userID}, &cart)
+	if errors.Is(err, ErrNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("GetActiveCartForUser: %w", err)
 	}
-	return GetCart(ctx, db, cartID)
+	return &cart, nil
 }
 
 // CreateCart inserts a new active cart and returns it.
-func CreateCart(ctx context.Context, db *sql.DB, userID string, req CreateCartRequest) (*Cart, error) {
-	cur := req.Currency
-	if cur == "" {
-		cur = "USD"
+func CreateCart(ctx context.Context, c *Client, userID string, req CreateCartRequest) (*Cart, error) {
+	tripPlanID := ""
+	if req.TripPlanID != nil {
+		tripPlanID = *req.TripPlanID
 	}
-	c := &Cart{}
-	err := db.QueryRowContext(ctx, `
-		INSERT INTO commerce_carts (user_id, trip_plan_id, currency)
-		VALUES ($1, $2, $3)
-		RETURNING id, user_id, trip_plan_id, status, currency, metadata, expires_at, created_at, updated_at
-	`, userID, nullStr(func() string {
-		if req.TripPlanID != nil {
-			return *req.TripPlanID
-		}
-		return ""
-	}()), cur).Scan(
-		&c.ID, &c.UserID, new(sql.NullString), &c.Status, &c.Currency,
-		new([]byte), new(sql.NullTime), &c.CreatedAt, &c.UpdatedAt,
-	)
+	var cart Cart
+	err := c.post(ctx, "/api/cart/create", map[string]any{
+		"user_id":      userID,
+		"trip_plan_id": tripPlanID,
+		"currency":     req.Currency,
+	}, &cart)
 	if err != nil {
 		return nil, fmt.Errorf("CreateCart: %w", err)
 	}
-	c.TripPlanID = req.TripPlanID
-	c.Items = []CartItem{}
-	return c, nil
+	return &cart, nil
 }
 
-// AddItem inserts a cart item and returns the updated cart.
-func AddItem(ctx context.Context, db *sql.DB, cartID string, req AddItemRequest) (*CartItem, error) {
-	if req.Quantity <= 0 {
-		req.Quantity = 1
+// AddItem inserts a cart item and returns it.
+func AddItem(ctx context.Context, c *Client, cartID string, req AddItemRequest) (*CartItem, error) {
+	travelerDate := ""
+	if req.TravelerDate != nil {
+		travelerDate = *req.TravelerDate
 	}
-	totalPrice := req.UnitPrice * float64(req.Quantity)
-
-	snapshotRaw, _ := json.Marshal(req.ItemSnapshot)
-	aiCtxRaw, _ := json.Marshal(req.AIRecommendationContext)
-
-	item := &CartItem{}
-	err := db.QueryRowContext(ctx, `
-		INSERT INTO commerce_cart_items
-		    (cart_id, item_type, item_id, quantity, unit_price, total_price,
-		     item_snapshot, ai_recommended, ai_recommendation_context, traveler_date)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
-		RETURNING id, cart_id, item_type, item_id, quantity, unit_price, total_price,
-		          item_snapshot, ai_recommended, ai_recommendation_context, traveler_date,
-		          created_at::text, updated_at::text
-	`, cartID, req.ItemType, req.ItemID, req.Quantity, req.UnitPrice, totalPrice,
-		snapshotRaw, req.AIRecommended, aiCtxRaw, nullStr(func() string {
-			if req.TravelerDate != nil {
-				return *req.TravelerDate
-			}
-			return ""
-		}()),
-	).Scan(
-		&item.ID, &item.CartID, &item.ItemType, &item.ItemID,
-		&item.Quantity, &item.UnitPrice, &item.TotalPrice,
-		new([]byte), &item.AIRecommended, new([]byte), new(sql.NullString),
-		&item.CreatedAt, &item.UpdatedAt,
-	)
+	var item CartItem
+	err := c.post(ctx, "/api/cart/add-item", map[string]any{
+		"cart_id":                   cartID,
+		"item_type":                 req.ItemType,
+		"item_id":                   req.ItemID,
+		"quantity":                  req.Quantity,
+		"unit_price":                req.UnitPrice,
+		"item_snapshot":             req.ItemSnapshot,
+		"ai_recommended":            req.AIRecommended,
+		"ai_recommendation_context": req.AIRecommendationContext,
+		"traveler_date":             travelerDate,
+	}, &item)
 	if err != nil {
 		return nil, fmt.Errorf("AddItem: %w", err)
 	}
-	item.ItemSnapshot = req.ItemSnapshot
-	item.TravelerDate = req.TravelerDate
-	return item, nil
+	return &item, nil
 }
 
 // RemoveItem deletes a cart item by ID.
-func RemoveItem(ctx context.Context, db *sql.DB, cartID, itemID string) error {
-	res, err := db.ExecContext(ctx,
-		`DELETE FROM commerce_cart_items WHERE id = $1 AND cart_id = $2`,
-		itemID, cartID,
-	)
+func RemoveItem(ctx context.Context, c *Client, cartID, itemID string) error {
+	err := c.post(ctx, "/api/cart/remove-item", map[string]string{
+		"cart_id": cartID,
+		"item_id": itemID,
+	}, nil)
+	if errors.Is(err, ErrNotFound) {
+		return fmt.Errorf("item not found")
+	}
 	if err != nil {
 		return fmt.Errorf("RemoveItem: %w", err)
-	}
-	n, _ := res.RowsAffected()
-	if n == 0 {
-		return fmt.Errorf("item not found")
 	}
 	return nil
 }
 
 // UpdateItemQuantity changes quantity and recomputes total_price.
-func UpdateItemQuantity(ctx context.Context, db *sql.DB, cartID, itemID string, quantity int) (*CartItem, error) {
-	item := &CartItem{}
-	err := db.QueryRowContext(ctx, `
-		UPDATE commerce_cart_items
-		SET quantity    = $3,
-		    total_price = unit_price * $3
-		WHERE id = $1 AND cart_id = $2
-		RETURNING id, cart_id, item_type, item_id, quantity, unit_price, total_price,
-		          ai_recommended, traveler_date, created_at::text, updated_at::text
-	`, itemID, cartID, quantity).Scan(
-		&item.ID, &item.CartID, &item.ItemType, &item.ItemID,
-		&item.Quantity, &item.UnitPrice, &item.TotalPrice,
-		&item.AIRecommended, new(sql.NullString),
-		&item.CreatedAt, &item.UpdatedAt,
-	)
-	if err == sql.ErrNoRows {
+func UpdateItemQuantity(ctx context.Context, c *Client, cartID, itemID string, quantity int) (*CartItem, error) {
+	var item CartItem
+	err := c.post(ctx, "/api/cart/update-item-quantity", map[string]any{
+		"cart_id":  cartID,
+		"item_id":  itemID,
+		"quantity": quantity,
+	}, &item)
+	if errors.Is(err, ErrNotFound) {
 		return nil, fmt.Errorf("item not found")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("UpdateItemQuantity: %w", err)
 	}
-	return item, nil
+	return &item, nil
 }
 
 // MarkCartCheckedOut sets status = 'checked_out'.
-func MarkCartCheckedOut(ctx context.Context, db *sql.DB, cartID string) error {
-	_, err := db.ExecContext(ctx,
-		`UPDATE commerce_carts SET status = 'checked_out' WHERE id = $1`,
-		cartID,
-	)
-	return err
-}
-
-// ─── private helpers ──────────────────────────────────────────────────────────
-
-func getCartItems(ctx context.Context, db *sql.DB, cartID string) ([]CartItem, error) {
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, cart_id, item_type, item_id, quantity, unit_price, total_price,
-		       item_snapshot, ai_recommended, ai_recommendation_context, traveler_date,
-		       created_at::text, updated_at::text
-		FROM commerce_cart_items WHERE cart_id = $1 ORDER BY created_at
-	`, cartID)
-	if err != nil {
-		return nil, fmt.Errorf("getCartItems: %w", err)
+func MarkCartCheckedOut(ctx context.Context, c *Client, cartID string) error {
+	if err := c.post(ctx, "/api/cart/mark-checked-out", map[string]string{"cart_id": cartID}, nil); err != nil {
+		return fmt.Errorf("MarkCartCheckedOut: %w", err)
 	}
-	defer rows.Close()
-
-	var items []CartItem
-	for rows.Next() {
-		var item CartItem
-		var snapshotRaw, aiCtxRaw []byte
-		var travelerDate sql.NullString
-		if err = rows.Scan(
-			&item.ID, &item.CartID, &item.ItemType, &item.ItemID,
-			&item.Quantity, &item.UnitPrice, &item.TotalPrice,
-			&snapshotRaw, &item.AIRecommended, &aiCtxRaw, &travelerDate,
-			&item.CreatedAt, &item.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		_ = json.Unmarshal(snapshotRaw, &item.ItemSnapshot)
-		_ = json.Unmarshal(aiCtxRaw, &item.AIRecommendationContext)
-		if travelerDate.Valid {
-			item.TravelerDate = &travelerDate.String
-		}
-		items = append(items, item)
-	}
-	if items == nil {
-		items = []CartItem{}
-	}
-	return items, nil
-}
-
-func sumItems(items []CartItem) float64 {
-	var total float64
-	for _, it := range items {
-		total += it.TotalPrice
-	}
-	return total
-}
-
-func nullStr(s string) interface{} {
-	if s == "" {
-		return nil
-	}
-	return s
+	return nil
 }

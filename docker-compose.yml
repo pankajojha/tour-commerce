@@ -3,3 +3,41 @@ services:
     build: .
     ports:
       - "8088:80"
+
+  db-proxy:
+    build:
+      context: ./tour-agent/services/db-proxy
+      dockerfile: Dockerfile
+    container_name: db-proxy
+    restart: unless-stopped
+    environment:
+      DATABASE_CLIENT: ${DATABASE_CLIENT:-postgres}
+      DATABASE_HOST: ${DATABASE_HOST:-db.pankajojha.dev}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      DATABASE_NAME: ${DATABASE_NAME:-explorerdb}
+      DATABASE_USERNAME: ${DATABASE_USERNAME:-exploreruser}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-Passw0rd1}
+      DATABASE_SSLMODE: ${DATABASE_SSLMODE:-require}
+      DB_HOST: ${DATABASE_HOST:-db.pankajojha.dev}
+      DB_PORT: ${DATABASE_PORT:-5432}
+      DB_USER: ${DATABASE_USERNAME:-exploreruser}
+      DB_PASSWORD: ${DATABASE_PASSWORD:-Passw0rd1}
+      DB_NAME: ${DATABASE_NAME:-explorerdb}
+      DB_SSLMODE: ${DATABASE_SSLMODE:-require}
+      HTTP_PORT: "8090"
+      # Bearer token required by the REST API. MUST be set (see .env); the
+      # service logs a warning and runs unauthenticated if empty.
+      DB_PROXY_API_KEY: ${DB_PROXY_API_KEY:-}
+    ports:
+      - "8090:8090"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8090/health"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+    networks:
+      - dbproxy-net
+
+networks:
+  dbproxy-net:
+    driver: bridge

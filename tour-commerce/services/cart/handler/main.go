@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,7 +15,7 @@ import (
 	cartpkg "github.com/explorer-agent/commerce-cart/cart"
 )
 
-var db *sql.DB
+var db *cartpkg.Client
 
 func init() {
 	var err error

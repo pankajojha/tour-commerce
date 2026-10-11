@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,7 +15,7 @@ import (
 	ai "github.com/explorer-agent/commerce-ai/commerce_ai"
 )
 
-var db *sql.DB
+var db *ai.Client
 
 func init() {
 	var err error
