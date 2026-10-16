@@ -3,27 +3,91 @@ package commerce_ai
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
-
-	_ "github.com/lib/pq"
+	"strings"
+	"time"
 )
 
-// Open returns a connected *sql.DB for audit logging.
-func Open() (*sql.DB, error) {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		return nil, fmt.Errorf("DATABASE_URL is not set")
+// The audit-logging SQL has been migrated to db-proxy
+// (internal/queries/ai_query.go). This package now speaks to db-proxy's
+// /api/ai/* domain API over HTTP; it sends parameters as JSON and never builds
+// SQL. The tour-planner-ai calls below remain plain upstream HTTP requests.
+
+// Client calls db-proxy domain APIs. Modeled on trips/handler/dbproxy_client.go:
+// reads DB_PROXY_URL + DB_PROXY_API_KEY and POSTs JSON with a Bearer token.
+type Client struct {
+	baseURL      string
+	apiKey       string
+	clientID     string
+	clientSecret string
+	http         *http.Client
+}
+
+// ErrNotFound mirrors a 404 from the db-proxy domain API.
+var ErrNotFound = errors.New("not found")
+
+// Open returns a configured db-proxy Client for audit logging. Kept as Open()
+// so callers do not change their initialization flow.
+func Open() (*Client, error) {
+	base := normalizeProxyBaseURL(firstNonEmpty(
+		os.Getenv("DB_PROXY_URL"), os.Getenv("DATABASE_PROXY_URL"),
+		os.Getenv("DB_PROXY_ADDR"), os.Getenv("DATABASE_PROXY_ADDR"),
+		proxyTarget(),
+	))
+	if base == "" {
+		return nil, fmt.Errorf("db-proxy base URL not configured (set DB_PROXY_URL)")
 	}
-	db, err := sql.Open("postgres", dsn)
-	if err != nil {
-		return nil, err
+	return &Client{
+		baseURL:      strings.TrimRight(base, "/"),
+		apiKey:       os.Getenv("DB_PROXY_API_KEY"),
+		clientID:     getenvDefault("DB_PROXY_CLIENT_ID", "johnpankaj"),
+		clientSecret: getenvDefault("DB_PROXY_CLIENT_SECRET", "exploreragents2findmytour"),
+		http:         &http.Client{Timeout: 15 * time.Second},
+	}, nil
+}
+
+func proxyTarget() string {
+	if host := firstNonEmpty(os.Getenv("DB_PROXY_HOST"), os.Getenv("DATABASE_PROXY_HOST")); host != "" {
+		port := firstNonEmpty(os.Getenv("DB_PROXY_PORT"), os.Getenv("DATABASE_PROXY_PORT"), "8090")
+		return host + ":" + port
 	}
-	return db, db.Ping()
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// getenvDefault returns the env var value or fallback when unset/empty.
+func getenvDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func normalizeProxyBaseURL(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	if strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") {
+		return v
+	}
+	if strings.HasSuffix(v, ":443") || strings.EqualFold(os.Getenv("DB_PROXY_TLS"), "true") {
+		return "https://" + v
+	}
+	return "http://" + v
 }
 
 // Recommend calls tour-planner-ai with an excursion/activity recommendation prompt
@@ -88,15 +152,40 @@ func Upsell(ctx context.Context, req UpsellRequest) (*AIResponse, error) {
 	return parseAIResponse(raw, "excursion"), nil
 }
 
-// LogInteraction persists an AI commerce interaction for audit.
-func LogInteraction(ctx context.Context, db *sql.DB, userID, cartID, interactionType string, request, response any, agentIntent string) {
-	reqRaw, _ := json.Marshal(request)
-	respRaw, _ := json.Marshal(response)
-	_, _ = db.ExecContext(ctx, `
-		INSERT INTO commerce_ai_interactions
-		    (user_id, cart_id, interaction_type, request_payload, response_payload, agent_intent)
-		VALUES ($1,$2,$3,$4,$5,$6)
-	`, userID, nullStr(cartID), interactionType, reqRaw, respRaw, nullStr(agentIntent))
+// LogInteraction persists an AI commerce interaction for audit via db-proxy.
+// Best-effort: logging failures are swallowed so the AI flow is never blocked.
+func LogInteraction(ctx context.Context, c *Client, userID, cartID, interactionType string, request, response any, agentIntent string) {
+	if c == nil {
+		return
+	}
+	body := map[string]any{
+		"user_id":          userID,
+		"cart_id":          cartID,
+		"interaction_type": interactionType,
+		"request":          request,
+		"response":         response,
+		"agent_intent":     agentIntent,
+	}
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/ai/log-interaction", bytes.NewReader(raw))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	if c.clientID != "" {
+		req.Header.Set("X-Client-Id", c.clientID)
+	}
+	if c.clientSecret != "" {
+		req.Header.Set("X-Client-Secret", c.clientSecret)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close()
 }
 
 // ─── private helpers ──────────────────────────────────────────────────────────
@@ -183,11 +272,4 @@ func mergeMaps(a, b map[string]any) map[string]any {
 		out[k] = v
 	}
 	return out
-}
-
-func nullStr(s string) interface{} {
-	if s == "" {
-		return nil
-	}
-	return s
 }

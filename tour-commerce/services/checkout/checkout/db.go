@@ -1,225 +1,292 @@
 package checkout
 
 import (
+	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"time"
-
-	_ "github.com/lib/pq"
 )
 
-// Open returns a connected *sql.DB using DATABASE_URL from the environment.
-func Open() (*sql.DB, error) {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		return nil, fmt.Errorf("DATABASE_URL is not set")
+// SQL has been migrated to db-proxy (internal/queries/checkout_query.go). This
+// package now speaks to db-proxy's /api/checkout/* domain APIs over HTTP; it
+// sends parameters as JSON and never builds SQL.
+
+// Client calls db-proxy domain APIs. Modeled on trips/handler/dbproxy_client.go:
+// reads DB_PROXY_URL + DB_PROXY_API_KEY and POSTs JSON with a Bearer token.
+type Client struct {
+	baseURL      string
+	apiKey       string
+	clientID     string
+	clientSecret string
+	http         *http.Client
+}
+
+// ErrNotFound mirrors a 404 from the db-proxy domain API.
+var ErrNotFound = errors.New("not found")
+
+// Open returns a configured db-proxy Client.
+func Open() (*Client, error) {
+	base := normalizeProxyBaseURL(firstNonEmpty(
+		os.Getenv("DB_PROXY_URL"), os.Getenv("DATABASE_PROXY_URL"),
+		os.Getenv("DB_PROXY_ADDR"), os.Getenv("DATABASE_PROXY_ADDR"),
+		proxyTarget(),
+	))
+	if base == "" {
+		return nil, fmt.Errorf("db-proxy base URL not configured (set DB_PROXY_URL)")
 	}
-	db, err := sql.Open("postgres", dsn)
+	return &Client{
+		baseURL:      strings.TrimRight(base, "/"),
+		apiKey:       os.Getenv("DB_PROXY_API_KEY"),
+		clientID:     getenvDefault("DB_PROXY_CLIENT_ID", "johnpankaj"),
+		clientSecret: getenvDefault("DB_PROXY_CLIENT_SECRET", "exploreragents2findmytour"),
+		http:         &http.Client{Timeout: 15 * time.Second},
+	}, nil
+}
+
+func proxyTarget() string {
+	if host := firstNonEmpty(os.Getenv("DB_PROXY_HOST"), os.Getenv("DATABASE_PROXY_HOST")); host != "" {
+		port := firstNonEmpty(os.Getenv("DB_PROXY_PORT"), os.Getenv("DATABASE_PROXY_PORT"), "8090")
+		return host + ":" + port
+	}
+	return ""
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if value != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+// getenvDefault returns the env var value or fallback when unset/empty.
+func getenvDefault(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+func normalizeProxyBaseURL(v string) string {
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return ""
+	}
+	if strings.HasPrefix(v, "http://") || strings.HasPrefix(v, "https://") {
+		return v
+	}
+	if strings.HasSuffix(v, ":443") || strings.EqualFold(os.Getenv("DB_PROXY_TLS"), "true") {
+		return "https://" + v
+	}
+	return "http://" + v
+}
+
+func (c *Client) post(ctx context.Context, path string, body any, out any) error {
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(raw))
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return db, db.Ping()
+	req.Header.Set("Content-Type", "application/json")
+	if c.apiKey != "" {
+		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+	}
+	if c.clientID != "" {
+		req.Header.Set("X-Client-Id", c.clientID)
+	}
+	if c.clientSecret != "" {
+		req.Header.Set("X-Client-Secret", c.clientSecret)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		if out == nil {
+			return nil
+		}
+		if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+			return fmt.Errorf("decode %s response: %w", path, err)
+		}
+		return nil
+	case http.StatusNotFound:
+		return ErrNotFound
+	default:
+		data, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("db-proxy %s: status %d: %s", path, resp.StatusCode, strings.TrimSpace(string(data)))
+	}
 }
 
 // CartSummary is the minimal cart info needed for checkout.
 type CartSummary struct {
-	ID          string
-	UserID      string
-	TripPlanID  string
-	Status      string
-	Currency    string
-	TotalAmount float64
-	Items       []CartItemSummary
+	ID          string            `json:"id"`
+	UserID      string            `json:"user_id"`
+	TripPlanID  string            `json:"trip_plan_id"`
+	Status      string            `json:"status"`
+	Currency    string            `json:"currency"`
+	TotalAmount float64           `json:"total_amount"`
+	Items       []CartItemSummary `json:"items"`
 }
 
 // CartItemSummary is the minimal item info needed to create bookings.
 type CartItemSummary struct {
-	ID           string
-	ItemType     string
-	ItemID       string
-	Quantity     int
-	UnitPrice    float64
-	TotalPrice   float64
-	ItemSnapshot map[string]any
-	TravelerDate string
+	ID           string         `json:"id"`
+	ItemType     string         `json:"item_type"`
+	ItemID       string         `json:"item_id"`
+	Quantity     int            `json:"quantity"`
+	UnitPrice    float64        `json:"unit_price"`
+	TotalPrice   float64        `json:"total_price"`
+	ItemSnapshot map[string]any `json:"item_snapshot"`
+	TravelerDate string         `json:"traveler_date"`
 }
 
 // GetCartSummary loads the cart and all its items for checkout validation.
-func GetCartSummary(ctx context.Context, db *sql.DB, cartID, userID string) (*CartSummary, error) {
-	cs := &CartSummary{}
-	var tripPlanID sql.NullString
-
-	err := db.QueryRowContext(ctx, `
-		SELECT id, user_id, trip_plan_id, status, currency
-		FROM commerce_carts WHERE id = $1 AND user_id = $2
-	`, cartID, userID).Scan(&cs.ID, &cs.UserID, &tripPlanID, &cs.Status, &cs.Currency)
-	if err == sql.ErrNoRows {
+// Returns (nil, nil) when the cart is absent, preserving the original contract.
+func GetCartSummary(ctx context.Context, c *Client, cartID, userID string) (*CartSummary, error) {
+	var cs CartSummary
+	err := c.post(ctx, "/api/checkout/cart-summary", map[string]string{
+		"cart_id": cartID,
+		"user_id": userID,
+	}, &cs)
+	if errors.Is(err, ErrNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("GetCartSummary: %w", err)
 	}
-	if tripPlanID.Valid {
-		cs.TripPlanID = tripPlanID.String
-	}
-
-	rows, err := db.QueryContext(ctx, `
-		SELECT id, item_type, item_id, quantity, unit_price, total_price, item_snapshot, traveler_date
-		FROM commerce_cart_items WHERE cart_id = $1
-	`, cartID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	for rows.Next() {
-		var item CartItemSummary
-		var snapshotRaw []byte
-		var travelerDate sql.NullString
-		if err = rows.Scan(&item.ID, &item.ItemType, &item.ItemID,
-			&item.Quantity, &item.UnitPrice, &item.TotalPrice,
-			&snapshotRaw, &travelerDate,
-		); err != nil {
-			return nil, err
-		}
-		_ = json.Unmarshal(snapshotRaw, &item.ItemSnapshot)
-		if travelerDate.Valid {
-			item.TravelerDate = travelerDate.String
-		}
-		cs.TotalAmount += item.TotalPrice
-		cs.Items = append(cs.Items, item)
-	}
-	return cs, nil
+	return &cs, nil
 }
 
 // CreateSession inserts a checkout session and returns it.
-func CreateSession(ctx context.Context, db *sql.DB, cartID, userID string, totalAmount float64, currency string, billing any) (*Session, error) {
-	billingRaw, _ := json.Marshal(billing)
-	expires := time.Now().UTC().Add(30 * time.Minute)
-
-	s := &Session{}
-	err := db.QueryRowContext(ctx, `
-		INSERT INTO commerce_checkout_sessions (cart_id, user_id, total_amount, currency, billing_details, expires_at)
-		VALUES ($1,$2,$3,$4,$5,$6)
-		RETURNING id, cart_id, user_id, status, billing_details, total_amount, currency, expires_at, created_at, updated_at
-	`, cartID, userID, totalAmount, currency, billingRaw, expires).Scan(
-		&s.ID, &s.CartID, &s.UserID, &s.Status,
-		new([]byte), &s.TotalAmount, &s.Currency, &s.ExpiresAt, &s.CreatedAt, &s.UpdatedAt,
-	)
+func CreateSession(ctx context.Context, c *Client, cartID, userID string, totalAmount float64, currency string, billing any) (*Session, error) {
+	var s Session
+	err := c.post(ctx, "/api/checkout/create-session", map[string]any{
+		"cart_id":         cartID,
+		"user_id":         userID,
+		"total_amount":    totalAmount,
+		"currency":        currency,
+		"billing_details": billing,
+	}, &s)
 	if err != nil {
 		return nil, fmt.Errorf("CreateSession: %w", err)
 	}
-	s.BillingDetails = billing
-	return s, nil
+	return &s, nil
 }
 
-// GetSession retrieves a checkout session by ID.
-func GetSession(ctx context.Context, db *sql.DB, sessionID string) (*Session, error) {
-	s := &Session{}
-	var billingRaw, aiRaw []byte
-	err := db.QueryRowContext(ctx, `
-		SELECT id, cart_id, user_id, status, ai_validation, billing_details, total_amount, currency, expires_at, created_at, updated_at
-		FROM commerce_checkout_sessions WHERE id = $1
-	`, sessionID).Scan(
-		&s.ID, &s.CartID, &s.UserID, &s.Status,
-		&aiRaw, &billingRaw, &s.TotalAmount, &s.Currency,
-		&s.ExpiresAt, &s.CreatedAt, &s.UpdatedAt,
-	)
-	if err == sql.ErrNoRows {
+// GetSession retrieves a checkout session by ID. Returns (nil, nil) when absent.
+func GetSession(ctx context.Context, c *Client, sessionID string) (*Session, error) {
+	var s Session
+	err := c.post(ctx, "/api/checkout/get-session", map[string]string{"session_id": sessionID}, &s)
+	if errors.Is(err, ErrNotFound) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, fmt.Errorf("GetSession: %w", err)
 	}
-	_ = json.Unmarshal(billingRaw, &s.BillingDetails)
-	_ = json.Unmarshal(aiRaw, &s.AIValidation)
-	return s, nil
+	return &s, nil
 }
 
 // UpdateSessionStatus sets the session status and optionally stores AI validation.
-func UpdateSessionStatus(ctx context.Context, db *sql.DB, sessionID string, status SessionStatus, aiValidation any) error {
-	aiRaw, _ := json.Marshal(aiValidation)
-	_, err := db.ExecContext(ctx, `
-		UPDATE commerce_checkout_sessions
-		SET status = $2, ai_validation = $3
-		WHERE id = $1
-	`, sessionID, status, aiRaw)
-	return err
+func UpdateSessionStatus(ctx context.Context, c *Client, sessionID string, status SessionStatus, aiValidation any) error {
+	if err := c.post(ctx, "/api/checkout/update-session-status", map[string]any{
+		"session_id":    sessionID,
+		"status":        string(status),
+		"ai_validation": aiValidation,
+	}, nil); err != nil {
+		return fmt.Errorf("UpdateSessionStatus: %w", err)
+	}
+	return nil
 }
 
-// CreateOrder inserts an order from a confirmed checkout session.
-func CreateOrder(ctx context.Context, db *sql.DB, session *Session, cart *CartSummary, paymentIntentID string) (string, error) {
-	var orderID string
-	err := db.QueryRowContext(ctx, `
-		INSERT INTO commerce_orders
-		    (checkout_session_id, cart_id, user_id, trip_plan_id, total_amount, currency, payment_intent_id, billing_details)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-		RETURNING id
-	`, session.ID, session.CartID, session.UserID,
-		nullStr(cart.TripPlanID), session.TotalAmount, session.Currency,
-		nullStr(paymentIntentID), mustJSON(session.BillingDetails),
-	).Scan(&orderID)
+// orderItemInput mirrors db-proxy's CheckoutOrderItemInput JSON contract.
+type orderItemInput struct {
+	ItemType     string `json:"item_type"`
+	ItemID       string `json:"item_id"`
+	Quantity     int    `json:"quantity"`
+	UnitPrice    float64 `json:"unit_price"`
+	TotalPrice   float64 `json:"total_price"`
+	ItemSnapshot any    `json:"item_snapshot"`
+	TravelerDate string `json:"traveler_date"`
+}
+
+// CreateOrder inserts an order (and its items) from a confirmed checkout session.
+func CreateOrder(ctx context.Context, c *Client, session *Session, cart *CartSummary, paymentIntentID string) (string, error) {
+	items := make([]orderItemInput, 0, len(cart.Items))
+	for _, item := range cart.Items {
+		items = append(items, orderItemInput{
+			ItemType:     item.ItemType,
+			ItemID:       item.ItemID,
+			Quantity:     item.Quantity,
+			UnitPrice:    item.UnitPrice,
+			TotalPrice:   item.TotalPrice,
+			ItemSnapshot: item.ItemSnapshot,
+			TravelerDate: item.TravelerDate,
+		})
+	}
+	var resp struct {
+		OrderID string `json:"order_id"`
+	}
+	err := c.post(ctx, "/api/checkout/create-order", map[string]any{
+		"session_id":        session.ID,
+		"cart_id":           session.CartID,
+		"user_id":           session.UserID,
+		"trip_plan_id":      cart.TripPlanID,
+		"total_amount":      session.TotalAmount,
+		"currency":          session.Currency,
+		"payment_intent_id": paymentIntentID,
+		"billing_details":   session.BillingDetails,
+		"items":             items,
+	}, &resp)
 	if err != nil {
 		return "", fmt.Errorf("CreateOrder: %w", err)
 	}
-
-	for _, item := range cart.Items {
-		snapshotRaw, _ := json.Marshal(item.ItemSnapshot)
-		_, err = db.ExecContext(ctx, `
-			INSERT INTO commerce_order_items
-			    (order_id, item_type, item_id, quantity, unit_price, total_price, item_snapshot, traveler_date)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
-		`, orderID, item.ItemType, item.ItemID,
-			item.Quantity, item.UnitPrice, item.TotalPrice,
-			snapshotRaw, nullStr(item.TravelerDate),
-		)
-		if err != nil {
-			return "", fmt.Errorf("CreateOrder insert item: %w", err)
-		}
-	}
-	return orderID, nil
+	return resp.OrderID, nil
 }
 
 // ConfirmOrderItem updates a single order item with the tour-agent booking ID.
-func ConfirmOrderItem(ctx context.Context, db *sql.DB, orderID, itemID, tourAgentBookingID string) error {
-	_, err := db.ExecContext(ctx, `
-		UPDATE commerce_order_items
-		SET status = 'confirmed', tour_agent_booking_id = $3
-		WHERE order_id = $1 AND id = $2
-	`, orderID, itemID, tourAgentBookingID)
-	return err
+func ConfirmOrderItem(ctx context.Context, c *Client, orderID, itemID, tourAgentBookingID string) error {
+	if err := c.post(ctx, "/api/checkout/confirm-order-item", map[string]string{
+		"order_id":              orderID,
+		"item_id":               itemID,
+		"tour_agent_booking_id": tourAgentBookingID,
+	}, nil); err != nil {
+		return fmt.Errorf("ConfirmOrderItem: %w", err)
+	}
+	return nil
 }
 
 // SetOrderStatus updates the top-level order status.
-func SetOrderStatus(ctx context.Context, db *sql.DB, orderID, status string) error {
-	_, err := db.ExecContext(ctx,
-		`UPDATE commerce_orders SET status = $2 WHERE id = $1`, orderID, status)
-	return err
+func SetOrderStatus(ctx context.Context, c *Client, orderID, status string) error {
+	if err := c.post(ctx, "/api/checkout/set-order-status", map[string]string{
+		"order_id": orderID,
+		"status":   status,
+	}, nil); err != nil {
+		return fmt.Errorf("SetOrderStatus: %w", err)
+	}
+	return nil
 }
 
 // LogAIInteraction persists an AI commerce interaction for audit.
-func LogAIInteraction(ctx context.Context, db *sql.DB, userID, cartID, interactionType string, request, response any, agentIntent string) error {
-	reqRaw, _ := json.Marshal(request)
-	respRaw, _ := json.Marshal(response)
-	_, err := db.ExecContext(ctx, `
-		INSERT INTO commerce_ai_interactions
-		    (user_id, cart_id, interaction_type, request_payload, response_payload, agent_intent)
-		VALUES ($1,$2,$3,$4,$5,$6)
-	`, userID, nullStr(cartID), interactionType, reqRaw, respRaw, nullStr(agentIntent))
-	return err
-}
-
-func nullStr(s string) interface{} {
-	if s == "" {
-		return nil
+func LogAIInteraction(ctx context.Context, c *Client, userID, cartID, interactionType string, request, response any, agentIntent string) error {
+	if err := c.post(ctx, "/api/checkout/log-ai-interaction", map[string]any{
+		"user_id":          userID,
+		"cart_id":          cartID,
+		"interaction_type": interactionType,
+		"request":          request,
+		"response":         response,
+		"agent_intent":     agentIntent,
+	}, nil); err != nil {
+		return fmt.Errorf("LogAIInteraction: %w", err)
 	}
-	return s
-}
-
-func mustJSON(v any) []byte {
-	b, _ := json.Marshal(v)
-	return b
+	return nil
 }

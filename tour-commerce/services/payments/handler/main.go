@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -22,7 +21,7 @@ import (
 	paypkg "github.com/explorer-agent/commerce-payments/payments"
 )
 
-var db *sql.DB
+var db *paypkg.Client
 
 func init() {
 	stripe.Key = os.Getenv("STRIPE_SECRET_KEY")
@@ -37,8 +36,8 @@ type routeHandler func(context.Context, events.APIGatewayProxyRequest) (events.A
 
 func handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
 	routes := map[string]routeHandler{
-		"POST /commerce/payments/intent":           handleCreateIntent,
-		"POST /commerce/payments/webhook":          handleWebhook,
+		"POST /commerce/payments/intent":            handleCreateIntent,
+		"POST /commerce/payments/webhook":           handleWebhook,
 		"POST /commerce/payments/{order_id}/refund": handleRefund,
 	}
 	key := matchRoute(req.HTTPMethod, req.Path)
@@ -91,7 +90,9 @@ func handleCreateIntent(ctx context.Context, req events.APIGatewayProxyRequest) 
 	params := &stripe.PaymentIntentParams{
 		Amount:   stripe.Int64(amountCents),
 		Currency: stripe.String(cur),
-		Metadata: map[string]string{"order_id": body.OrderID},
+		Params: stripe.Params{
+			Metadata: map[string]string{"order_id": body.OrderID},
+		},
 	}
 	pi, stripeErr := paymentintent.New(params)
 	if stripeErr != nil {
@@ -191,11 +192,11 @@ func handleRefund(ctx context.Context, req events.APIGatewayProxyRequest) (event
 	}
 
 	// Fetch the payment to get the Stripe PaymentIntent ID.
-	var paymentIntentID string
-	_ = db.QueryRowContext(ctx,
-		`SELECT provider_payment_id FROM commerce_payments WHERE order_id = $1 AND status = 'succeeded'`,
-		orderID,
-	).Scan(&paymentIntentID)
+	paymentIntentID, err := paypkg.GetSucceededPaymentIntentForOrder(ctx, db, orderID)
+	if err != nil {
+		log.Printf("GetSucceededPaymentIntentForOrder: %v", err)
+		return jsonError(http.StatusInternalServerError, "db error"), nil
+	}
 	if paymentIntentID == "" {
 		return jsonError(http.StatusNotFound, "no succeeded payment found for this order"), nil
 	}

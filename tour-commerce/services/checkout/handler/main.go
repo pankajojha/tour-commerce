@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -16,7 +15,7 @@ import (
 	co "github.com/explorer-agent/commerce-checkout/checkout"
 )
 
-var db *sql.DB
+var db *co.Client
 
 func init() {
 	var err error

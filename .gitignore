@@ -63,3 +63,16 @@ cdk.context.json
 
 # Local database data
 local/postgres/data/
+
+# Terraform (tour-agent-infra) — keep state, plans, and live tfvars out of git
+.terraform/
+.terraform.lock.hcl
+*.tfstate
+*.tfstate.*
+*.tfplan
+tour-agent-infra/terraform/tfplan*
+tour-agent-infra/terraform/terraform.tfvars
+tour-agent-infra/findmytour-tf/terraform.tfvars
+
+# Local database data
+tour-agent-infra/local/postgres/data/

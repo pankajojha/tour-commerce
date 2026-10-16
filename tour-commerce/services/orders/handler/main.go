@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -17,7 +16,7 @@ import (
 	orderpkg "github.com/explorer-agent/commerce-orders/orders"
 )
 
-var db *sql.DB
+var db *orderpkg.Client
 
 func init() {
 	var err error

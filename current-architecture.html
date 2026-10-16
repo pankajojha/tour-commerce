@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Tour Planner — Current-State Architecture &amp; DB Connectivity</title>
+<style>
+  :root {
+    --bg: #0f1420;
+    --panel: #182031;
+    --panel2: #1e293b;
+    --line: #334155;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --accent: #38bdf8;
+    --go: #00add8;
+    --py: #ffd43b;
+    --react: #61dafb;
+    --db: #f97316;
+    --proxy: #a78bfa;
+    --warn: #f87171;
+    --ok: #4ade80;
+    --cf: #f6821f;
+    --aws: #ff9900;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg); color: var(--text); line-height: 1.5;
+  }
+  header {
+    padding: 28px 40px; border-bottom: 1px solid var(--line);
+    background: linear-gradient(120deg, #111827, #1e293b);
+  }
+  header h1 { margin: 0 0 6px; font-size: 24px; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  .wrap { max-width: 1200px; margin: 0 auto; padding: 32px 40px 80px; }
+  h2 { font-size: 19px; margin: 40px 0 14px; border-left: 4px solid var(--accent); padding-left: 12px; }
+  h3 { font-size: 15px; color: var(--accent); margin: 20px 0 8px; }
+  .grid { display: grid; gap: 16px; }
+  .cols-2 { grid-template-columns: 1fr 1fr; }
+  .cols-3 { grid-template-columns: repeat(3, 1fr); }
+  @media (max-width: 900px) { .cols-2, .cols-3 { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .card h4 { margin: 0 0 6px; font-size: 14px; }
+  .tag {
+    display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 20px;
+    font-weight: 600; margin-right: 6px; margin-bottom: 4px;
+  }
+  .t-go { background: rgba(0,173,216,.15); color: var(--go); }
+  .t-py { background: rgba(255,212,59,.15); color: var(--py); }
+  .t-react { background: rgba(97,218,251,.15); color: var(--react); }
+  .t-db { background: rgba(249,115,22,.15); color: var(--db); }
+  .t-proxy { background: rgba(167,139,250,.15); color: var(--proxy); }
+  .t-cf { background: rgba(246,130,31,.15); color: var(--cf); }
+  .t-aws { background: rgba(255,153,0,.15); color: var(--aws); }
+  .muted { color: var(--muted); font-size: 13px; }
+  code { background: #0b1220; padding: 1px 6px; border-radius: 4px; font-size: 12.5px; color: #cbd5e1; }
+  .diagram {
+    background: var(--panel2); border: 1px solid var(--line); border-radius: 12px;
+    padding: 24px; overflow-x: auto;
+  }
+  svg { display: block; margin: 0 auto; max-width: 100%; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--accent); font-weight: 600; }
+  .callout {
+    border-left: 4px solid var(--warn); background: rgba(248,113,113,.08);
+    padding: 12px 16px; border-radius: 6px; margin: 14px 0; font-size: 13.5px;
+  }
+  .callout.ok { border-color: var(--ok); background: rgba(74,222,128,.08); }
+  .steps { counter-reset: step; list-style: none; padding: 0; }
+  .steps li {
+    position: relative; padding: 14px 16px 14px 54px; margin-bottom: 12px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+  }
+  .steps li::before {
+    counter-increment: step; content: counter(step);
+    position: absolute; left: 16px; top: 14px; width: 26px; height: 26px;
+    background: var(--accent); color: #06263a; font-weight: 700; font-size: 13px;
+    border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  }
+  .steps li b { color: var(--text); }
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin: 8px 0 0; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 6px; }
+  .dot { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .flow-line { stroke-dasharray: 5 4; }
+  .done { color: var(--ok); font-weight: 600; }
+  .partial { color: var(--py); font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Tour Planner Platform — Current-State Architecture</h1>
+  <p>Focus: service topology and database connectivity as actually configured today (docker-compose, Cloudflare Pages + Tunnel, external PostgreSQL, REST db-proxy with a domain-API layer). Reconstructed from source, env files, docker-compose, and Terraform deploy configs.</p>
+</header>
+
+<div class="wrap">
+
+  <div class="callout">
+    <b>Reality vs. CLAUDE.md / design docs:</b> The written design describes an all-AWS serverless target (Aurora Serverless v2, ElastiCache, CloudFront). The <b>currently deployed</b> state is a hybrid: an <b>external self-hosted PostgreSQL</b> at <code>db.pankajojha.dev:5432</code> (Terraform <code>module.database</code> is <em>"Secrets Manager only; no AWS RDS"</em>), a <b>REST/JSON db-proxy</b> container fronting that DB (previously gRPC — now HTTP for simpler internet exposure), that proxy published to AWS through a <b>Cloudflare Tunnel</b> at <code>db-proxy.exploreragents.com</code>, and the two React UIs served from <b>Cloudflare Pages</b> with same-origin <code>/api</code> proxying. This document reflects the current state.
+  </div>
+
+  <div class="callout ok">
+    <b>What changed since the last revision:</b>
+    <ul style="margin:8px 0 0; padding-left:18px;">
+      <li><b>db-proxy is REST, not gRPC.</b> Listens on <code>:8090</code> (was <code>:50051</code>). <code>GET /health</code> + typed domain routes, plus unauthenticated <code>/docs</code> and <code>/openapi.yaml</code>.</li>
+      <li><b>The generic <code>/query</code> &amp; <code>/exec</code> raw-SQL endpoints have been removed.</b> All DB access now goes through typed <code>/api/&lt;project&gt;/&lt;action&gt;</code> endpoints — there is no longer a way to send raw SQL over the wire.</li>
+      <li><b>Domain-API layer, expanded.</b> Projects: <code>trips</code>, <code>auth</code>, <code>policy</code>, <code>cart</code>, <code>checkout</code>, <code>orders</code>, <code>payments</code>, <code>ai</code>, and a large new <code>aiapp</code> (~50 endpoints: trip plans, members, sections, entries, versions, runs, events, outputs + legal-hold/retention, nonces, webhook callbacks, share tokens, system prompts). SQL is <em>owned by db-proxy</em> in <code>internal/queries/*_query.go</code> and bound server-side with pgx placeholders; callers POST parameters only, never SQL. Multi-statement flows (e.g. <code>activate-prompt</code>) run in a server-side transaction.</li>
+      <li><b>Go services deleted their SQL.</b> <code>trips/db/db.go</code>, <code>trips/lifecycle/lifecycle.go</code> removed; <code>trips</code>, <code>auth</code>, <code>policy</code> handlers and every <code>tour-commerce</code> service now call db-proxy over HTTP. Their <code>Open()</code> returns an HTTP client, not <code>*sql.DB</code>. (<code>policy/db/db.go</code> still exists with a dead <code>dbproxy</code>-driver fallback but nothing imports it.)</li>
+      <li><b>tour-planner-ai routes through db-proxy too.</b> Repositories (<code>system_prompts</code>, <code>ai_runs</code>, <code>trip_plans</code>, <code>webhooks</code>, <code>redaction_vault</code>) gained a dual path: when <code>DB_PROXY_URL</code> is set they call the typed <code>/api/aiapp/*</code> endpoints via the new <code>AIAppClient</code> and <code>DATABASE_URL</code> is unused; otherwise the original asyncpg SQL path runs. RLS <code>set_config(user_id, …, is_local=true)</code> can't persist across REST calls, so user scoping is best-effort in proxy mode. (The earlier generic <code>DBProxyPool</code> / <code>bind_sql</code> shim still ships but now targets removed endpoints.)</li>
+      <li><b>DB migrations V005 / V006 added</b> (<code>allow_two_open_trips</code>, <code>trip_entitlement_and_free_trip_limit</code>); V001–V004 also revised. Commerce CDK moved to <code>tour-agent-infra/infrastructure/commerce/</code> (the old <code>tour-commerce/infrastructure/</code> was deleted).</li>
+      <li><b>Two auth gates on db-proxy.</b> Client credentials (<code>X-Client-Id</code>/<code>X-Client-Secret</code>, defaults <code>johnpankaj</code> / <code>exploreragents2findmytour</code> — <em>on by default</em>) and an optional bearer token (<code>Authorization: Bearer $DB_PROXY_API_KEY</code>).</li>
+      <li><b>Cloudflare Tunnel exposure.</b> <code>cloudflared</code> on host <code>192.168.1.133</code> publishes <code>db-proxy.exploreragents.com</code> → local <code>:8090</code>. TLS terminates at the Cloudflare edge; the LAN hop cloudflared→db-proxy is plaintext HTTP.</li>
+      <li><b>Client env vars changed:</b> <code>DB_PROXY_URL</code> (+ <code>DB_PROXY_API_KEY</code>, <code>DB_PROXY_CLIENT_ID</code>, <code>DB_PROXY_CLIENT_SECRET</code>) replace the old <code>DB_PROXY_ADDR/HOST/PORT</code> trio (still accepted as fallbacks).</li>
+    </ul>
+  </div>
+
+  <h2>1. System Topology (current)</h2>
+  <div class="diagram">
+    <svg viewBox="0 0 1080 660" role="img" aria-label="Current architecture diagram">
+      <defs>
+        <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L8,3 L0,6 Z" fill="#64748b" />
+        </marker>
+        <marker id="arrowDb" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L8,3 L0,6 Z" fill="#f97316" />
+        </marker>
+        <marker id="arrowCf" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth">
+          <path d="M0,0 L8,3 L0,6 Z" fill="#f6821f" />
+        </marker>
+      </defs>
+
+      <!-- Clients -->
+      <rect x="30" y="24" width="200" height="92" rx="8" fill="#182031" stroke="#61dafb"/>
+      <text x="130" y="48" text-anchor="middle" fill="#61dafb" font-size="13" font-weight="700">Browsers</text>
+      <text x="130" y="68" text-anchor="middle" fill="#94a3b8" font-size="11">findmytour.ai</text>
+      <text x="130" y="84" text-anchor="middle" fill="#94a3b8" font-size="11">exploreragents.com</text>
+      <text x="130" y="102" text-anchor="middle" fill="#94a3b8" font-size="11">Cognito Hosted UI (OAuth)</text>
+
+      <!-- Cloudflare Pages -->
+      <rect x="30" y="158" width="200" height="128" rx="8" fill="#182031" stroke="#f6821f"/>
+      <text x="130" y="182" text-anchor="middle" fill="#f6821f" font-size="13" font-weight="700">Cloudflare Pages</text>
+      <text x="130" y="202" text-anchor="middle" fill="#94a3b8" font-size="11">find-my-tour-ui (SPA)</text>
+      <text x="130" y="218" text-anchor="middle" fill="#94a3b8" font-size="11">tour-planner-ui (SPA)</text>
+      <text x="130" y="240" text-anchor="middle" fill="#cbd5e1" font-size="11">functions/api/[[path]].js</text>
+      <text x="130" y="256" text-anchor="middle" fill="#94a3b8" font-size="10.5">same-origin /api proxy</text>
+      <text x="130" y="274" text-anchor="middle" fill="#94a3b8" font-size="10.5">→ API_ORIGIN</text>
+
+      <!-- API Gateway -->
+      <rect x="320" y="158" width="190" height="128" rx="8" fill="#182031" stroke="#ff9900"/>
+      <text x="415" y="182" text-anchor="middle" fill="#ff9900" font-size="13" font-weight="700">AWS API Gateway</text>
+      <text x="415" y="202" text-anchor="middle" fill="#94a3b8" font-size="11">REST · Cognito JWT authz</text>
+      <text x="415" y="222" text-anchor="middle" fill="#94a3b8" font-size="10.5">5dny4g2ebl…/production</text>
+      <text x="415" y="246" text-anchor="middle" fill="#cbd5e1" font-size="11">routes: /auth/* /policy/*</text>
+      <text x="415" y="262" text-anchor="middle" fill="#cbd5e1" font-size="11">/trips/* /api (ai-proxy)</text>
+
+      <!-- Lambdas -->
+      <rect x="600" y="52" width="200" height="240" rx="8" fill="#182031" stroke="#00add8"/>
+      <text x="700" y="76" text-anchor="middle" fill="#00add8" font-size="13" font-weight="700">Go Lambdas (VPC)</text>
+      <text x="700" y="100" text-anchor="middle" fill="#94a3b8" font-size="11">auth/ (8 sub-handlers)</text>
+      <text x="700" y="118" text-anchor="middle" fill="#94a3b8" font-size="11">trips/ · policy/</text>
+      <text x="700" y="136" text-anchor="middle" fill="#94a3b8" font-size="11">ai-proxy/ (allowlist)</text>
+      <line x1="620" y1="150" x2="780" y2="150" stroke="#334155"/>
+      <text x="700" y="170" text-anchor="middle" fill="#a78bfa" font-size="11" font-weight="600">tour-commerce Lambdas</text>
+      <text x="700" y="188" text-anchor="middle" fill="#94a3b8" font-size="10.5">cart · checkout · orders</text>
+      <text x="700" y="204" text-anchor="middle" fill="#94a3b8" font-size="10.5">payments · ai-commerce</text>
+      <line x1="620" y1="216" x2="780" y2="216" stroke="#334155"/>
+      <text x="700" y="236" text-anchor="middle" fill="#cbd5e1" font-size="10.5">DB access = HTTPS calls to</text>
+      <text x="700" y="251" text-anchor="middle" fill="#cbd5e1" font-size="10.5">db-proxy domain APIs</text>
+      <text x="700" y="268" text-anchor="middle" fill="#94a3b8" font-size="10">DB_PROXY_URL + bearer +</text>
+      <text x="700" y="281" text-anchor="middle" fill="#94a3b8" font-size="10">client credentials</text>
+
+      <!-- AI -->
+      <rect x="600" y="322" width="200" height="86" rx="8" fill="#182031" stroke="#ffd43b"/>
+      <text x="700" y="345" text-anchor="middle" fill="#ffd43b" font-size="13" font-weight="700">tour-planner-ai</text>
+      <text x="700" y="364" text-anchor="middle" fill="#94a3b8" font-size="11">Bedrock AgentCore (Py)</text>
+      <text x="700" y="380" text-anchor="middle" fill="#94a3b8" font-size="10.5">POST /invocations :8080</text>
+      <text x="700" y="396" text-anchor="middle" fill="#94a3b8" font-size="10.5">repos: asyncpg OR /api/aiapp/* (AIAppClient)</text>
+
+      <!-- Cloudflare Tunnel -->
+      <rect x="330" y="330" width="180" height="86" rx="8" fill="#182031" stroke="#f6821f"/>
+      <text x="420" y="353" text-anchor="middle" fill="#f6821f" font-size="12.5" font-weight="700">Cloudflare Tunnel</text>
+      <text x="420" y="372" text-anchor="middle" fill="#94a3b8" font-size="10.5">db-proxy.exploreragents.com</text>
+      <text x="420" y="388" text-anchor="middle" fill="#94a3b8" font-size="10">cloudflared @ 192.168.1.133</text>
+      <text x="420" y="404" text-anchor="middle" fill="#94a3b8" font-size="10">(opt.) CF Access service token</text>
+
+      <!-- db-proxy -->
+      <rect x="330" y="440" width="230" height="132" rx="8" fill="#182031" stroke="#a78bfa"/>
+      <text x="445" y="463" text-anchor="middle" fill="#a78bfa" font-size="13" font-weight="700">db-proxy (REST/JSON)</text>
+      <text x="445" y="482" text-anchor="middle" fill="#94a3b8" font-size="10.5">docker-compose · :8090 · /health</text>
+      <text x="445" y="498" text-anchor="middle" fill="#cbd5e1" font-size="10.5">/api/&lt;project&gt;/&lt;action&gt; only (SQL here)</text>
+      <text x="445" y="514" text-anchor="middle" fill="#94a3b8" font-size="10">projects: trips auth policy cart checkout</text>
+      <text x="445" y="528" text-anchor="middle" fill="#94a3b8" font-size="10">orders payments ai · aiapp (~50)</text>
+      <text x="445" y="544" text-anchor="middle" fill="#94a3b8" font-size="10">pgxpool → Postgres · client creds + bearer</text>
+      <text x="445" y="560" text-anchor="middle" fill="#f87171" font-size="9.5">⚠ LAN hop cloudflared→proxy is plaintext</text>
+
+      <!-- External DB -->
+      <rect x="720" y="452" width="240" height="118" rx="8" fill="#182031" stroke="#f97316"/>
+      <text x="840" y="478" text-anchor="middle" fill="#f97316" font-size="13" font-weight="700">External PostgreSQL</text>
+      <text x="840" y="500" text-anchor="middle" fill="#cbd5e1" font-size="12">db.pankajojha.dev:5432</text>
+      <text x="840" y="520" text-anchor="middle" fill="#94a3b8" font-size="11">explorerdb (tour-agent)</text>
+      <text x="840" y="536" text-anchor="middle" fill="#94a3b8" font-size="11">+ commerce · strapi DBs</text>
+      <text x="840" y="554" text-anchor="middle" fill="#94a3b8" font-size="10.5">sslmode=require</text>
+
+      <!-- Strapi CMS -->
+      <rect x="30" y="440" width="200" height="92" rx="8" fill="#182031" stroke="#4ade80"/>
+      <text x="130" y="464" text-anchor="middle" fill="#4ade80" font-size="13" font-weight="700">tour-planner-cms</text>
+      <text x="130" y="484" text-anchor="middle" fill="#94a3b8" font-size="11">Strapi (Node) :1337</text>
+      <text x="130" y="502" text-anchor="middle" fill="#94a3b8" font-size="10.5">own docker-compose</text>
+      <text x="130" y="520" text-anchor="middle" fill="#94a3b8" font-size="10.5">native PG client</text>
+
+      <!-- edges -->
+      <line x1="130" y1="116" x2="130" y2="156" stroke="#64748b" marker-end="url(#arrow)"/>
+      <line x1="230" y1="222" x2="318" y2="222" stroke="#64748b" marker-end="url(#arrow)"/>
+      <line x1="510" y1="205" x2="598" y2="180" stroke="#64748b" marker-end="url(#arrow)"/>
+      <line x1="790" y1="230" x2="800" y2="322" stroke="#64748b" class="flow-line" marker-end="url(#arrow)"/>
+      <text x="806" y="300" fill="#94a3b8" font-size="9">ai-proxy → AI</text>
+
+      <!-- Lambda → Cloudflare Tunnel → db-proxy -->
+      <line x1="600" y1="255" x2="512" y2="345" stroke="#f6821f" class="flow-line" marker-end="url(#arrowCf)"/>
+      <text x="520" y="300" fill="#f6821f" font-size="9">HTTPS :443</text>
+      <line x1="420" y1="416" x2="420" y2="438" stroke="#f6821f" marker-end="url(#arrowCf)"/>
+      <line x1="560" y1="512" x2="718" y2="500" stroke="#f97316" marker-end="url(#arrowDb)"/>
+      <text x="600" y="498" fill="#f97316" font-size="9">pgx (TLS)</text>
+
+      <!-- AI to DB: direct asyncpg, or via db-proxy /api/aiapp/* when DB_PROXY_URL set -->
+      <line x1="712" y1="384" x2="772" y2="452" stroke="#f97316" class="flow-line" marker-end="url(#arrowDb)"/>
+      <text x="690" y="432" fill="#f97316" font-size="9">asyncpg (fallback)</text>
+      <line x1="600" y1="366" x2="512" y2="372" stroke="#f6821f" class="flow-line" marker-end="url(#arrowCf)"/>
+      <text x="505" y="352" fill="#f6821f" font-size="8.5">/api/aiapp/* (preferred)</text>
+      <!-- CMS to DB -->
+      <line x1="230" y1="486" x2="316" y2="486" stroke="#f97316" class="flow-line" marker-end="url(#arrowDb)"/>
+
+      <text x="540" y="640" text-anchor="middle" fill="#64748b" font-size="10">Dashed = data/flow edges · Orange = PostgreSQL · Cloudflare-orange = tunnelled HTTP</text>
+    </svg>
+    <div class="legend">
+      <span><i class="dot" style="background:#61dafb"></i>React SPA</span>
+      <span><i class="dot" style="background:#f6821f"></i>Cloudflare (Pages / Tunnel)</span>
+      <span><i class="dot" style="background:#ff9900"></i>AWS API GW</span>
+      <span><i class="dot" style="background:#00add8"></i>Go Lambda</span>
+      <span><i class="dot" style="background:#ffd43b"></i>Python AI</span>
+      <span><i class="dot" style="background:#a78bfa"></i>REST db-proxy</span>
+      <span><i class="dot" style="background:#f97316"></i>PostgreSQL</span>
+      <span><i class="dot" style="background:#4ade80"></i>Strapi CMS</span>
+    </div>
+  </div>
+
+  <h2>2. Services</h2>
+  <div class="grid cols-3">
+    <div class="card">
+      <h4>tour-agent</h4>
+      <span class="tag t-go">Go 1.21 · Lambda</span>
+      <p class="muted">System of record. Sub-services: <code>auth</code> (8 handlers), <code>trips</code>, <code>policy</code>, <code>ai-proxy</code>. <code>trips</code>/<code>policy</code>/<code>auth</code> own <b>no SQL</b> — they call db-proxy domain APIs over HTTP.</p>
+    </div>
+    <div class="card">
+      <h4>db-proxy</h4>
+      <span class="tag t-proxy">Go · REST/JSON</span>
+      <p class="muted">Fronts external Postgres over HTTP on <code>:8090</code>. <b>Typed domain API only</b> (<code>/api/&lt;project&gt;/&lt;action&gt;</code>) — raw <code>/query</code>&amp;<code>/exec</code> removed. All SQL lives in <code>internal/queries/*_query.go</code>; multi-statement flows run in a server-side transaction. Root <code>docker-compose.yml</code>.</p>
+    </div>
+    <div class="card">
+      <h4>tour-planner-ai</h4>
+      <span class="tag t-py">Python 3.11</span>
+      <p class="muted">Bedrock AgentCore. 9 specialist agents; MCP tools for catalogue reads. Its transactional repositories (<code>trip_plans</code>, <code>ai_runs</code>, <code>webhooks</code>, <code>redaction_vault</code>, <code>system_prompts</code>) call db-proxy <code>/api/aiapp/*</code> via <code>AIAppClient</code> when <code>DB_PROXY_URL</code> is set, else asyncpg.</p>
+    </div>
+    <div class="card">
+      <h4>tour-commerce</h4>
+      <span class="tag t-go">Go 1.21 · Lambda</span>
+      <p class="muted">cart · checkout · orders · payments · ai-commerce. Each service's <code>db.go</code> was rewritten — <code>Open()</code> now returns an HTTP client to db-proxy <code>/api/{cart,checkout,orders,payments,ai}/*</code>. Local CDK <code>infrastructure/</code> removed; it now lives in <code>tour-agent-infra/infrastructure/commerce/</code>.</p>
+    </div>
+    <div class="card">
+      <h4>tour-planner-ui</h4>
+      <span class="tag t-react">React 19 · Vite</span>
+      <span class="tag t-cf">Cloudflare Pages</span>
+      <p class="muted">exploreragents.com. All APIs via same-origin <code>/api</code>. Token refresh path <code>/auth/refresh</code>.</p>
+    </div>
+    <div class="card">
+      <h4>find-my-tour-ui</h4>
+      <span class="tag t-react">React · Vite</span>
+      <span class="tag t-cf">Cloudflare Pages</span>
+      <p class="muted">findmytour.ai. <code>/api</code> → <code>API_ORIGIN</code> (API Gateway prod). Feature routes, server-side logout, pricing hidden, planning gated. Mock mode via <code>VITE_USE_MOCK</code>.</p>
+    </div>
+    <div class="card">
+      <h4>tour-planner-cms</h4>
+      <span class="tag t-react">Strapi · Node</span>
+      <span class="tag t-db">PostgreSQL</span>
+      <p class="muted">Headless CMS on <code>:1337</code>, own docker-compose, connects to Postgres with its native client (not via db-proxy).</p>
+    </div>
+    <div class="card">
+      <h4>tour-agent-infra</h4>
+      <span class="tag t-aws">Terraform · CDK</span>
+      <span class="tag t-cf">cloudflared</span>
+      <p class="muted">Live root = <code>terraform/</code>. <code>module.database</code> is Secrets-Manager-only (no RDS). <code>terraform/deploy/db-proxy-tunnel/</code> holds the cloudflared config; <code>terraform/deploy/db-gateway/</code> is an <em>alternative</em> nginx-gateway design (not deployed). DB migrations V001–V006 in <code>infrastructure/database/migrations/</code>; commerce CDK + <code>V001__commerce_schema.sql</code> in <code>infrastructure/commerce/</code>.</p>
+    </div>
+    <div class="card">
+      <h4>docs</h4>
+      <span class="tag t-cf">nginx</span>
+      <p class="muted">Static docs container on <code>:8088</code> (root docker-compose).</p>
+    </div>
+  </div>
+
+  <h2>3. Database Connectivity (the important part)</h2>
+  <p class="muted">One external PostgreSQL host <code>db.pankajojha.dev:5432</code> holds logically separate databases (<code>explorerdb</code> for tour-agent, a commerce DB, and the Strapi DB). In production every tour-agent / tour-commerce service — and tour-planner-ai — reaches Postgres <em>through</em> db-proxy's typed domain API over HTTP; only db-proxy (and Strapi) hold a real connection pool. Three live paths, plus dead code:</p>
+
+  <table>
+    <tr><th>Path</th><th>Consumer</th><th>How it connects</th><th>Config keys</th></tr>
+    <tr>
+      <td><b>A. db-proxy domain API</b><br><span class="done">(primary)</span></td>
+      <td><code>trips</code>, <code>policy</code>, <code>auth</code> handlers; all 5 <code>tour-commerce</code> services; tour-planner-ai repositories (<code>/api/aiapp/*</code>) when <code>DB_PROXY_URL</code> is set</td>
+      <td>A typed HTTP client (Go <code>dbproxy_client.go</code> / <code>dbproxyclient/</code>, Python <code>AIAppClient</code>) calls <code>POST {DB_PROXY_URL}/api/&lt;project&gt;/&lt;action&gt;</code> with parameters as JSON. <b>SQL lives in db-proxy</b> (<code>internal/queries/*_query.go</code>), bound server-side with pgx placeholders; multi-statement flows run in a server-side transaction. Sends <code>Authorization: Bearer</code> + <code>X-Client-Id</code>/<code>X-Client-Secret</code>.</td>
+      <td><code>DB_PROXY_URL</code>, <code>DB_PROXY_API_KEY</code>, <code>DB_PROXY_CLIENT_ID</code>, <code>DB_PROXY_CLIENT_SECRET</code>, <code>DB_PROXY_TLS</code></td>
+    </tr>
+    <tr>
+      <td><b>B. direct Postgres</b></td>
+      <td>Go services' <code>db.Open()</code> when no <code>DB_PROXY_*</code> is set (local dev); auth Lambdas over VPN; tour-planner-ai asyncpg pool when <code>DB_PROXY_URL</code> is empty</td>
+      <td>Standard driver DSN (<code>lib/pq</code> / <code>asyncpg</code>) <code>host=… sslmode=require</code>. Terraform still passes <code>vpn_db_host</code> as <code>database_endpoint</code> to auth Lambdas.</td>
+      <td><code>DB_HOST</code>, <code>DB_NAME</code>, <code>DB_USER</code>, <code>DB_PASSWORD</code> / <code>DATABASE_URL</code></td>
+    </tr>
+    <tr>
+      <td><b>C. native driver</b></td>
+      <td>Strapi CMS</td>
+      <td>Strapi uses its own PG client (<code>DATABASE_*</code>) and never goes through db-proxy.</td>
+      <td><code>DATABASE_HOST/PORT/NAME/USERNAME/PASSWORD</code></td>
+    </tr>
+    <tr>
+      <td><b>✗ dead: generic REST-SQL</b><br><span class="partial">(orphaned)</span></td>
+      <td><code>policy/db/db.go</code>'s <code>dbproxy</code>-driver fallback; Python <code>dbproxy_pool.py</code> / <code>bind_sql</code></td>
+      <td>Both still POST raw SQL (client-side literal interpolation) to <code>/query</code>&amp;<code>/exec</code> — <b>endpoints db-proxy no longer serves</b>. Not on any live call path; should be deleted.</td>
+      <td>—</td>
+    </tr>
+  </table>
+
+  <h3>db-proxy internals</h3>
+  <div class="grid cols-2">
+    <div class="card">
+      <h4>Pool &amp; server</h4>
+      <p class="muted"><code>internal/dbpool</code> builds a DSN (<code>BuildDSN</code>, or <code>DATABASE_URL</code>) and opens one <code>pgxpool.Pool</code>. <code>internal/httpserver</code> serves <code>/health</code> (pool.Ping) and registers the domain routes only — the raw <code>/query</code>/<code>/exec</code> executors were removed. Per-request DB timeout 30s; graceful shutdown.</p>
+    </div>
+    <div class="card">
+      <h4>Domain API layer</h4>
+      <p class="muted"><code>internal/httpserver/domain{,_commerce,_aiapp}.go</code> + <code>internal/queries/</code> (trips, auth, policy, cart, checkout, orders, payments, ai, and <code>aiapp</code> — ~50 endpoints incl. trip plans, runs, outputs+retention, webhook callbacks, share tokens, system prompts). Each handler decodes a typed JSON struct and calls a query function using pgx placeholders. The only path to Postgres.</p>
+    </div>
+    <div class="card">
+      <h4>Auth (two gates)</h4>
+      <p class="muted"><b>Client credentials</b> — <code>X-Client-Id</code>/<code>X-Client-Secret</code> (aliases <code>client_id</code>/<code>secret</code>), constant-time compared, <b>enabled by default</b> (<code>johnpankaj</code> / <code>exploreragents2findmytour</code>). <b>Bearer token</b> — <code>Authorization: Bearer</code> or <code>X-Api-Key</code>, only enforced if <code>DB_PROXY_API_KEY</code> is set (warns and runs open otherwise). <code>/health</code>, <code>/docs</code>, <code>/openapi.yaml</code> are public.</p>
+    </div>
+    <div class="card">
+      <h4>Cloudflare exposure</h4>
+      <p class="muted"><code>cloudflared</code> on <code>192.168.1.133</code> maps <code>db-proxy.exploreragents.com</code> → <code>http://192.168.1.133:8090</code>. Edge terminates TLS (AWS→CF encrypted); cloudflared→proxy is plaintext HTTP on the LAN. Optional Cloudflare Access self-hosted app + service token for defence in depth.</p>
+    </div>
+  </div>
+
+  <div class="callout">
+    <b>Risks in current DB connectivity:</b>
+    <ul style="margin:8px 0 0; padding-left:18px;">
+      <li><b>Injection surface is closed on the live path.</b> Every serving endpoint (<code>/api/*</code>) binds params with pgx. Remaining risk is confined to <em>orphaned</em> code — <code>policy/db/db.go</code>'s <code>sqlLiteral</code> and Python <code>bind_sql</code> / <code>dbproxy_pool.py</code> — which target removed endpoints and should be deleted before they're accidentally rewired.</li>
+      <li><b>No caller-side transactions / prepared statements.</b> Atomicity now depends on db-proxy composing multi-statement work inside one query function (done for <code>activate-prompt</code>; each new cross-row flow needs the same treatment). tour-planner-ai's <code>conn.transaction()</code> is a no-op in proxy mode, so any repo method still doing multi-step work over the pool loses atomicity.</li>
+      <li><b>RLS scoping is lost in proxy mode.</b> tour-planner-ai's per-connection <code>set_config(request.user_id, …, is_local=true)</code> can't persist across independent db-proxy calls — row-level security must be enforced inside db-proxy / upstream; the <code>user_id</code> set by <code>get_connection()</code> is best-effort only.</li>
+      <li><b>Boundary shift.</b> tour-planner-ai now reads/writes <code>trip_plans</code>, <code>ai_runs</code>, <code>webhooks</code> etc. directly via <code>/api/aiapp/*</code>, not through tour-agent — CLAUDE.md still says the AI layer "must never own transactional state … calls tour-agent APIs via MCP tools". db-proxy is the new shared trust boundary; decide whether that's intentional.</li>
+      <li><b>LAN hop is plaintext.</b> cloudflared → db-proxy (<code>:8090</code>) is HTTP; bearer token + DB creds travel unencrypted on that segment. Mitigated only if that host/LAN is trusted.</li>
+      <li><b>Weak default credentials, committed.</b> <code>DB_PROXY_CLIENT_ID/SECRET</code> default to <code>johnpankaj</code>/<code>exploreragents2findmytour</code> in source; <code>docker-compose.yml</code> defaults the DB password to <code>Passw0rd1</code>; UI <code>.env</code> / <code>.env copy</code> files with live tokens are staged in <code>find-my-tour-ui</code>. <code>DB_PROXY_API_KEY</code> is optional and the service runs unauthenticated if unset.</li>
+      <li><b>Single points of failure.</b> One external DB host (<code>db.pankajojha.dev</code>, shared with commerce + CMS) and now one db-proxy container in front of <em>every</em> Go service and tour-planner-ai.</li>
+      <li><b>Design drift</b>: CLAUDE.md / design docs still promise Aurora + ElastiCache + CloudFront and Flyway-on-deploy; none back the DB today. A parallel <code>db-gateway</code> (nginx) design also exists in <code>terraform/deploy/</code>, unshipped — two competing "gateway" designs.</li>
+    </ul>
+  </div>
+
+  <h2>4. Request &amp; Data Flow</h2>
+  <ol class="steps">
+    <li><b>Browser → Cloudflare Pages.</b> SPA loads from <code>findmytour.ai</code> / <code>exploreragents.com</code>; all API calls go same-origin to <code>/api</code>.</li>
+    <li><b>Cloudflare Function proxy.</b> <code>functions/api/[[path]].js</code> forwards <code>/api/*</code> to <code>API_ORIGIN</code> (API Gateway <code>…execute-api…/production</code>).</li>
+    <li><b>API Gateway → Cognito JWT authorizer → Go Lambda</b> (auth / trips / policy / ai-proxy). Caller identity from JWT <code>sub</code>.</li>
+    <li><b>Lambda → db-proxy over HTTPS.</b> The Lambda's DB client calls <code>https://db-proxy.exploreragents.com/api/&lt;project&gt;/&lt;action&gt;</code> with a bearer token + client credentials. Cloudflare edge → cloudflared tunnel → db-proxy REST <code>:8090</code>.</li>
+    <li><b>db-proxy → PostgreSQL.</b> db-proxy picks the matching query in <code>internal/queries</code>, binds parameters with pgx, and runs it on the shared <code>pgxpool</code> against <code>db.pankajojha.dev</code> (<code>sslmode=require</code>).</li>
+    <li><b>ai-proxy → tour-planner-ai.</b> Strict allowlist reverse proxy to AgentCore <code>/invocations</code>. The AI reads catalogue data via MCP tools, but persists its own state (<code>trip_plans</code>, <code>ai_runs</code>, <code>webhooks</code>, <code>system_prompts</code>) via db-proxy <code>/api/aiapp/*</code> when <code>DB_PROXY_URL</code> is set, else asyncpg.</li>
+    <li><b>Commerce checkout</b> calls tour-planner-ai for budget/conflict validation, writes bookings back through tour-agent, and persists cart/order/payment state via db-proxy <code>/api/{checkout,orders,payments}/*</code>.</li>
+    <li><b>Strapi CMS</b> always connects with its native PG client, bypassing db-proxy.</li>
+  </ol>
+
+  <h2>5. Solution Steps — Hardening &amp; Aligning the Current State</h2>
+  <p class="muted">Ordered, incremental. Each step is independently shippable and does not require the full AWS target migration.</p>
+  <ol class="steps">
+    <li><b>Rotate &amp; remove committed secrets.</b> Rotate the <code>johnpankaj</code>/<code>exploreragents2findmytour</code> client credentials and set non-default values via env; rotate the <code>Passw0rd1</code> DB password; get the <code>find-my-tour-ui/.env</code> and <code>.env copy</code> files (with live Cloudflare tokens) out of the index and into <code>.gitignore</code>, scrub history.</li>
+    <li><b>Make <code>DB_PROXY_API_KEY</code> mandatory.</b> Fail startup instead of warning when it is unset, so the bearer gate can't silently be off in any environment.</li>
+    <li><b>Encrypt the LAN hop.</b> Either co-locate cloudflared and db-proxy so the plaintext hop is loopback-only, run db-proxy with TLS, or put both in the same Docker network with an internal TLS terminator. Add Cloudflare Access (service token) in front of the hostname.</li>
+    <li><b>Delete the orphaned SQL clients.</b> Remove <code>db-proxy/driver/</code>, <code>policy/db/db.go</code>, Python <code>dbproxy_pool.py</code> + <code>bind_sql</code>, and their tests — they interpolate SQL client-side and point at endpoints that no longer exist. Finish moving any remaining asyncpg repo method onto <code>/api/aiapp/*</code>.</li>
+    <li><b>Audit multi-statement flows for atomicity.</b> <code>activate-prompt</code> is transactional server-side; do the same for every checkout/order/override flow that touches more than one row, or add a session-token transaction API to db-proxy.</li>
+    <li><b>Centralize config via Secrets Manager.</b> Resolve <code>DB_PROXY_URL</code> + token + client creds (and the proxy's own DB creds) from Secrets Manager at startup instead of plaintext env / compose defaults.</li>
+    <li><b>Observability.</b> Wire the <code>/health</code> RPC into the container healthcheck (done in compose), emit <code>pgxpool</code> stats + structured request logs, and scrape them (CloudWatch / Prometheus). Add request IDs end-to-end.</li>
+    <li><b>Remove the DB SPOF.</b> PgBouncer or a read replica in front of <code>db.pankajojha.dev</code>; run db-proxy with ≥2 replicas behind the tunnel.</li>
+    <li><b>Pick one gateway design.</b> Decide between the REST <code>db-proxy</code> (shipped) and the nginx <code>db-gateway</code> (design-only in <code>terraform/deploy/db-gateway/</code>); delete the loser.</li>
+    <li><b>Reconcile docs with reality.</b> Update CLAUDE.md / design docs to describe the external-Postgres + REST-db-proxy + Cloudflare-Tunnel topology, or commit to the Aurora Serverless v2 target and delete the aspirational claims. One source of truth.</li>
+    <li><b>Verify &amp; test.</b> Integration tests against the proxy (domain endpoints + <code>/health</code>), a smoke test for each Lambda's DB path, contract tests for the request/response shapes in <code>internal/queries</code>, and a pool load test before rollout.</li>
+  </ol>
+
+  <p class="muted" style="margin-top:32px; border-top:1px solid var(--line); padding-top:16px;">
+    Generated from repository source. Current-state connectivity confirmed via <code>docker-compose.yml</code>, <code>tour-agent/services/db-proxy/*</code> (REST server, <code>internal/queries/</code>, <code>internal/httpserver/domain*.go</code>), <code>tour-agent/services/{trips,policy,auth}</code> and <code>tour-commerce/services/*</code> DB clients, <code>tour-planner-ai/tourplannerai-api/src/db/{aiapp_client,connection}.py</code> + repositories, <code>tour-agent-infra/terraform/deploy/db-proxy-tunnel/</code> and <code>infrastructure/{database,commerce}/migrations/</code>, UI <code>.env</code> files, and <code>tour-agent-infra/terraform/main.tf</code> (<code>module.database</code> = Secrets-Manager-only, auth Lambdas fed <code>vpn_db_host</code>). Working-tree state as of this revision; several submodules have uncommitted changes.
+  </p>
+</div>
+</body>
+</html>
